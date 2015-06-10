@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #
 #  (C) sadman@sfi.komi.com 2015
-#  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some and methods ideas 
+#  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some ideas and methods 
 #
 #
 use strict;
@@ -110,6 +110,8 @@ elsif ($globalConfig->{version} eq CONTROLLER_VERSION_2) {
        $globalConfig->{api_path}="$globalConfig->{location}/api";
        $globalConfig->{login_path}="$globalConfig->{location}/login";
        $globalConfig->{logout_path}="$globalConfig->{location}/logout";
+       $globalConfig->{login_data}="username=$globalConfig->{username}&password=$globalConfig->{password}&login=login";
+       $globalConfig->{login_type}='x-www-form-urlencoded';
      }
 else      
      {
