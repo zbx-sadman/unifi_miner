@@ -1,5 +1,7 @@
 # UniFi Miner
 
-It's a small tool for UniFi Controller data mining 
+It a small tool for UniFi Controller data mining for using with Zabbix server
 
-[On English] <https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-description>
+Description and short manual on English: <https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-English>
+Description and short manual on Russian: <https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-Russian>
+
