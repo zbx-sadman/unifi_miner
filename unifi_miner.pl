@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #
 #  (C) sadman@sfi.komi.com 2015
-#  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some ideas and methods 
+#  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some methods and ideas 
 #
 #
 use strict;
@@ -25,7 +25,7 @@ use constant {
      DEBUG_MID => 2,
      DEBUG_HIGH => 3,
      KEY_ITEMS_NUM => 'items_num',
-     MINER_VERSION => '0.9999',
+     MINER_VERSION => '0.99999',
      MSG_UNKNOWN_CONTROLLER_VERSION => "Version of controller is unknown: ",
      OBJ_SWITCH => 'switch',
      OBJ_PHONE => 'voip',
@@ -192,20 +192,20 @@ sub getMetric{
                      $paramValue=getMetric($hashRef->{$tableName}, $key, $_[2]+1); 
                    }
                   else {
-                     # if it just "first-level" key - get it value
-                     die "Key $key not exist" unless defined( $hashRef->{$key});
-                     $paramValue=$hashRef->{$key};
+                     # if it just "first-level" key - get it value                     
+                     $paramValue=undef;
+                     $paramValue=$hashRef->{$key} if (defined($hashRef->{$key}))
                    }
                   # need to fix trying sum of not numeric values
                   # do some math with value - sum or count               
                   if ($globalConfig->{action} eq ACT_SUM)
-                     { 
-                       $result+=$paramValue if ($paramValue); 
+                     {
+                       $result+=$paramValue if (defined($paramValue));
                      }
                   else
                      {
-                       # what need to COUNT - any exists key or key with $paramValue > 0 (true result of if condition)
-                       $result++ # if ($paramValue); 
+                       # Do count if key is exist
+                       $result++ if (defined($paramValue)); 
                      }
                   print "\n[.] Value=$paramValue, result=$result" if $globalConfig->{debug} >= DEBUG_HIGH;
               }#foreach;
@@ -221,11 +221,16 @@ sub getMetric{
          if ($tableName) 
             { $result=getMetric($table->{$tableName}, $key, $_[2]+1); }
          else { 
-              die "Key $key not exist" unless defined( $table->{$key});
-              $result=$table->{$key};
+              # Subtable can be not exist as vap_table for UAPs which is powered off.
+              # In this case $result must be undefined for properly processed on previous dive level if subroutine is called recursively              
+              $result=undef;
+              $result=$table->{$key} if ( defined($table->{$key}));
             }
        }
-  print "\n[>] getMetric finished ($result)" if $globalConfig->{debug} >= DEBUG_LOW;
+  print "\n[>] ($_[2]) getMetric finished (" if $globalConfig->{debug} >= DEBUG_LOW;
+  print $result if ($globalConfig->{debug} >= DEBUG_LOW && defined($result));
+  print ")" if $globalConfig->{debug} >= DEBUG_LOW;
+
   return $result;
 }
 
@@ -247,6 +252,7 @@ sub fetchData {
    my $fh;
    my $jsonData;
    my $v4RapidWay=FALSE;
+   my $tmpCacheFileName;
    #
    my $objectName=$globalConfig->{object};
    # forming path to objects store
@@ -283,26 +289,40 @@ sub fetchData {
                # here we need to call login/fetch/logout chain
                $jsonData=fetchDataFromController($objPath);
                #
-               open ($fh, "+>", $cacheFileName) or die "Could not write to $cacheFileName";
+               $tmpCacheFileName=$cacheFileName . ".tmp";
+               print "\n[.]   temporary cache file=$tmpCacheFileName" if $globalConfig->{debug} >= DEBUG_MID;
+               open ($fh, "+>", $tmpCacheFileName) or die "Could not write to $tmpCacheFileName";
                chmod 0666, $fh;
 #               sysopen ($fh,$cacheFileName, O_RDWR|O_CREAT|O_TRUNC, 0777) or die "Could not write to $cacheFileName";
                # lock file for monopoly mode write and push data
                # can i use O_EXLOCK flag into sysopen?
-               flock ($fh, 2) or die "Could not lock $cacheFileName";
-               print $fh encode_json($jsonData);
-               close $fh;
+
+               # if script can lock cache temp file - write data, close and rename it to proper name
+               if (flock ($fh, 2))
+                  {
+                     print $fh encode_json($jsonData);
+                     close $fh;
+                     rename $tmpCacheFileName, $cacheFileName;
+                  }
+               else
+                  {
+                     # can't lock - just close and use fetched json data for work
+                     close $fh;
+                  }
+
             }
           else
             {
                # first time try to open cache file for r/w (check for lock state -> check for finished write to cache by another process)
                # +< - do not create file
-               if (! open ($fh, "+<", $cacheFileName))
-                  {
-                     # wait...
-                     sleep 1;
-                     # second time try to open cache... if still locked - exit.
-                     open ($fh, "+<", $cacheFileName) or die "$cacheFileName is possibly locked, aborting";
-                  }
+#               if (! open ($fh, "+<", $cacheFileName))
+#                  {
+#                     # wait...
+#                     sleep 1;
+#                     # second time try to open cache... if still locked - exit.
+#                     open ($fh, "+<", $cacheFileName) or die "$cacheFileName is possibly locked, aborting";
+#                  }
+               open ($fh, "<", $cacheFileName) or die "$cacheFileName is possibly locked, aborting";
                # read data from file
                $jsonData=decode_json(<$fh>);
                # close cache
