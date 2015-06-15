@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #
 #  (C) sadman@sfi.komi.com 2015
-#  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some ideas and methods 
+#  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some methods and ideas 
 #
 #
 use strict;
@@ -18,6 +18,7 @@ use File::stat;
 use constant {
      ACT_COUNT => 'count',
      ACT_SUM => 'sum',
+     ACT_GET => 'get',
      CONTROLLER_VERSION_2 => 'v2',
      CONTROLLER_VERSION_3 => 'v3',
      CONTROLLER_VERSION_4 => 'v4',
@@ -25,11 +26,12 @@ use constant {
      DEBUG_MID => 2,
      DEBUG_HIGH => 3,
      KEY_ITEMS_NUM => 'items_num',
-     MINER_VERSION => '0.9999',
+     MINER_VERSION => '0.99999',
      MSG_UNKNOWN_CONTROLLER_VERSION => "Version of controller is unknown: ",
-     OBJ_SWITCH => 'switch',
-     OBJ_PHONE => 'voip',
+     OBJ_USW => 'usw',
+     OBJ_UVP => 'uvp',
      OBJ_UAP => 'uap',
+     OBJ_USG => 'usg',
      OBJ_WLAN => 'wlan',
      TRUE => 1,
      FALSE => 0,
@@ -56,7 +58,7 @@ my $globalConfig = {
    # Default action for objects metric
    action => ACT_COUNT,
    # How much time live cache data. Use 0 for disabling cache processes
-   cachetimeout => 30,
+   cachetimeout => 10800,
    # Where are store cache file. Better place is RAM-disk
    cacheroot=> '/run/shm', 
    # Debug level 
@@ -64,7 +66,7 @@ my $globalConfig = {
    # Where are controller answer. See value of 'unifi.https.port' in /opt/unifi/data/system.properties
    location => "https://127.0.0.1:8443", 
    # Operation object. wlan is exist in any case
-   object => OBJ_WLAN, 
+   object => OBJ_UAP, 
    # Name of your site 
    sitename => "default", 
    # who can read data with API
@@ -92,6 +94,7 @@ $globalConfig->{username}     = $options{u} if defined $options{u};
 $globalConfig->{version}      = $options{v} if defined $options{v};
 
 # Set controller version specific data
+
 if ($globalConfig->{version} eq CONTROLLER_VERSION_4) {
        $globalConfig->{api_path}="$globalConfig->{location}/api/s/$globalConfig->{sitename}";
        $globalConfig->{login_path}="$globalConfig->{location}/api/login";
@@ -143,6 +146,7 @@ if (defined($globalConfig->{null_char}))
    $res = $res ? $res : $globalConfig->{null_char};
  }
 print "\n" if  $globalConfig->{debug} >= DEBUG_LOW;
+$res="" unless defined ($res);
 # Put result of work to stdout
 print  "$res\n";
 
@@ -165,19 +169,30 @@ sub getMetric{
     my $table=$_[0];
     my $tableName;
     my $key=$_[1];
+    my $filterKey;
+    my $filterValue;
+    my $filterUsed;
+    my $filterMatched;
     print "\n[#]   options: key='$_[1]' action='$globalConfig->{action}'" if $globalConfig->{debug} >= DEBUG_MID;
     print "\n[+]   incoming object info:'\n\t", Dumper $_[0] if $globalConfig->{debug} >= DEBUG_HIGH;
 
     # maybe this code to regexp spliting need rewriten
-    ($tableName, $key) = split(/[.]/, $_[1], 2);
+    ($tableName, $key) = split(/[.]/, $key, 2);
+    # check for [filterkey=value] construction in tableName. If that exist - key filter feature will enabled
+    ($filterKey, $filterValue) = $tableName =~  m/^\[([-_\w]+)=([-_\w\x20]+)\]$/gi;
+    if (defined($filterKey) and defined($filterValue)) {
+         $filterUsed=TRUE;
+    }
+
     # if key is not defined after split (no comma in key) that mean no table name exist in key and key is first and only one part of splitted data
-    if (! $key) { $key = $tableName; $tableName=undef;}
+    if (! defined($key)) { $key = $tableName; $tableName=undef;}
 
     # Cheking for type of $_[0].
     # Array must be explored for key value in each element
-    if (ref($_[0]) eq "ARRAY") 
+    if (ref($table) eq "ARRAY") 
        {
          $result=@{$table};
+
          print "\n[.] $result sections given." if $globalConfig->{debug} >= DEBUG_MID;
          # if metric ask "how much items (AP's for example) in all" - just return array size (previously calculated in $result) and do nothing more
          if ($key ne KEY_ITEMS_NUM) 
@@ -185,27 +200,43 @@ sub getMetric{
              print "\n[.] taking value from all sections" if $globalConfig->{debug} >= DEBUG_MID;
              $result=0;
              foreach my $hashRef (@{$table}) {
+
                   # If need to analyze elements in subtable...
                   # $tableName=something mean that subkey was detected
                   if ($tableName) { 
+                     # Use filter and current object is that need - dive to array element
+                     if ($filterUsed && ( defined($hashRef->{$filterKey}) && ($hashRef->{$filterKey} eq $filterValue))) { 
+#                        print "\n >>> As filter is matched, going to next level with key=$key , hashRef=", Dumper $hashRef, "\n";
+                        $paramValue=getMetric($hashRef, $key, $_[2]+1); 
+                     }
+                     else {
                      # Do recursively calling getMetric func with subtable and subkey and get value from it
                      $paramValue=getMetric($hashRef->{$tableName}, $key, $_[2]+1); 
+                     }
                    }
                   else {
-                     # if it just "first-level" key - get it value
-                     die "Key $key not exist" unless defined( $hashRef->{$key});
-                     $paramValue=$hashRef->{$key};
+                     # if it just "first-level" key - get it value                     
+                     $paramValue=undef;
+                     $paramValue=$hashRef->{$key} if (defined($hashRef->{$key}))
                    }
                   # need to fix trying sum of not numeric values
                   # do some math with value - sum or count               
                   if ($globalConfig->{action} eq ACT_SUM)
-                     { 
-                       $result+=$paramValue if ($paramValue); 
-                     }
-                  else
                      {
-                       # what need to COUNT - any exists key or key with $paramValue > 0 (true result of if condition)
-                       $result++ # if ($paramValue); 
+                       $result+=$paramValue if (defined($paramValue));
+                     }
+                  elsif ($globalConfig->{action} eq ACT_COUNT)
+                     {
+                       # Do count if key is exist
+                       $result++ if (defined($paramValue)); 
+                     }
+                  else 
+                     {
+                       # Otherwise (ACT_GET option) - take value and go out from loop
+                       if (defined($paramValue)) {
+                           $result=$paramValue;
+                           last;
+                       }
                      }
                   print "\n[.] Value=$paramValue, result=$result" if $globalConfig->{debug} >= DEBUG_HIGH;
               }#foreach;
@@ -221,11 +252,16 @@ sub getMetric{
          if ($tableName) 
             { $result=getMetric($table->{$tableName}, $key, $_[2]+1); }
          else { 
-              die "Key $key not exist" unless defined( $table->{$key});
-              $result=$table->{$key};
+              # Subtable can be not exist as vap_table for UAPs which is powered off.
+              # In this case $result must be undefined for properly processed on previous dive level if subroutine is called recursively              
+              $result=undef;
+              $result=$table->{$key} if ( defined($table->{$key}));
             }
        }
-  print "\n[>] getMetric finished ($result)" if $globalConfig->{debug} >= DEBUG_LOW;
+  print "\n[>] ($_[2]) getMetric finished (" if $globalConfig->{debug} >= DEBUG_LOW;
+  print $result if ($globalConfig->{debug} >= DEBUG_LOW && defined($result));
+  print ")" if $globalConfig->{debug} >= DEBUG_LOW;
+
   return $result;
 }
 
@@ -247,12 +283,13 @@ sub fetchData {
    my $fh;
    my $jsonData;
    my $v4RapidWay=FALSE;
+   my $tmpCacheFileName;
    #
    my $objectName=$globalConfig->{object};
    # forming path to objects store
    if ($objectName eq OBJ_WLAN) 
       { $objPath="$globalConfig->{api_path}/list/wlanconf"; $checkObjType=FALSE; }
-   elsif ($objectName eq OBJ_UAP || $objectName eq OBJ_SWITCH || $objectName eq OBJ_PHONE)
+   elsif ($objectName eq OBJ_UAP || $objectName eq OBJ_USW || $objectName eq OBJ_USG || $objectName eq OBJ_UVP)
       { $objPath="$globalConfig->{api_path}/stat/device"; }
     else { die "[!] Unknown object given"; }
 
@@ -266,7 +303,7 @@ sub fetchData {
    if ($globalConfig->{cachetimeout} != 0)
       {
          my $cacheFileName = $globalConfig->{cacheroot} .'/'. md5_hex($objPath);
-         print "\n[.] Cache file name: $cacheFileName\n" if $globalConfig->{debug} >= DEBUG_HIGH;
+         print "\n[.] Cache file name: $cacheFileName\n" if $globalConfig->{debug} >= DEBUG_MID;
          # Cache file is exist and non-zero size?
          if (-e $cacheFileName && -s $cacheFileName)
             # Yes, is exist.
@@ -283,26 +320,40 @@ sub fetchData {
                # here we need to call login/fetch/logout chain
                $jsonData=fetchDataFromController($objPath);
                #
-               open ($fh, "+>", $cacheFileName) or die "Could not write to $cacheFileName";
+               $tmpCacheFileName=$cacheFileName . ".tmp";
+               print "\n[.]   temporary cache file=$tmpCacheFileName" if $globalConfig->{debug} >= DEBUG_MID;
+               open ($fh, "+>", $tmpCacheFileName) or die "Could not write to $tmpCacheFileName";
                chmod 0666, $fh;
 #               sysopen ($fh,$cacheFileName, O_RDWR|O_CREAT|O_TRUNC, 0777) or die "Could not write to $cacheFileName";
                # lock file for monopoly mode write and push data
                # can i use O_EXLOCK flag into sysopen?
-               flock ($fh, 2) or die "Could not lock $cacheFileName";
-               print $fh encode_json($jsonData);
-               close $fh;
+
+               # if script can lock cache temp file - write data, close and rename it to proper name
+               if (flock ($fh, 2))
+                  {
+                     print $fh encode_json($jsonData);
+                     close $fh;
+                     rename $tmpCacheFileName, $cacheFileName;
+                  }
+               else
+                  {
+                     # can't lock - just close and use fetched json data for work
+                     close $fh;
+                  }
+
             }
           else
             {
                # first time try to open cache file for r/w (check for lock state -> check for finished write to cache by another process)
                # +< - do not create file
-               if (! open ($fh, "+<", $cacheFileName))
-                  {
-                     # wait...
-                     sleep 1;
-                     # second time try to open cache... if still locked - exit.
-                     open ($fh, "+<", $cacheFileName) or die "$cacheFileName is possibly locked, aborting";
-                  }
+#               if (! open ($fh, "+<", $cacheFileName))
+#                  {
+#                     # wait...
+#                     sleep 1;
+#                     # second time try to open cache... if still locked - exit.
+#                     open ($fh, "+<", $cacheFileName) or die "$cacheFileName is possibly locked, aborting";
+#                  }
+               open ($fh, "<", $cacheFileName) or die "$cacheFileName is possibly locked, aborting";
                # read data from file
                $jsonData=decode_json(<$fh>);
                # close cache
@@ -331,7 +382,7 @@ sub fetchData {
              if ($hashRef->{'_id'} eq $globalConfig->{'id'}) { $result=$hashRef; last; }
           } 
 
-          # Workaround for object set without types (WLAN for example)
+          # Workaround for object without type key (WLAN for example)
           $hashRef->{type}=$globalConfig->{object} if (! $checkObjType);
 
           # Right type of object?
@@ -379,25 +430,44 @@ sub fetchDataFromController {
 #
 #####################################################################################################################################
 sub lldJSONGenerate{
+    # $_[0] - array/hash with info
     print "\n[+] lldJSONGenerate started" if $globalConfig->{debug} >= DEBUG_LOW;
     print "\n[#]   options: object='$globalConfig->{object}'" if $globalConfig->{debug} >= DEBUG_MID;
     my $lldData;
     my $resut;
     my $lldItem = 0;
     my $objectName=$globalConfig->{object};
-    foreach my $hashRef (@{$_[0]}) {
-       if ($objectName eq OBJ_WLAN) {
-              $lldData->{'data'}->[$lldItem]->{'{#ALIAS}'}=$hashRef->{'name'};
-              $lldData->{'data'}->[$lldItem]->{'{#ID}'}=$hashRef->{'_id'};
-         }
-       elsif ($objectName eq OBJ_UAP || $objectName eq OBJ_SWITCH || $objectName eq OBJ_PHONE) {
+    #print "\n[!] _[0]:\n", Dumper $_[0];
+
+    if (ref($_[0]) eq "ARRAY") 
+       {
+         foreach my $hashRef (@{$_[0]}) {
+           if ($objectName eq OBJ_WLAN) {
+               $lldData->{'data'}->[$lldItem]->{'{#ALIAS}'}=$hashRef->{'name'};
+               $lldData->{'data'}->[$lldItem]->{'{#ID}'}=$hashRef->{'_id'};
+           }
+           elsif ($objectName eq OBJ_UAP || $objectName eq OBJ_USG || $objectName eq OBJ_USW || $objectName eq OBJ_UVP ) {
               $lldData->{'data'}->[$lldItem]->{'{#ALIAS}'}=$hashRef->{'name'};
               $lldData->{'data'}->[$lldItem]->{'{#IP}'}=$hashRef->{'ip'};
               $lldData->{'data'}->[$lldItem]->{'{#ID}'}=$hashRef->{'_id'};
               $lldData->{'data'}->[$lldItem]->{'{#MAC}'}=$hashRef->{'mac'};
+           }
+           $lldItem++;
+         } #foreach;
+      }
+    # Just one object selected, need generate LLD with keys from subtable (USW for example)
+    else
+      {
+        if ($objectName eq OBJ_USW) {
+         my $uswMAC=$_[0]->{'mac'};
+         foreach my $hashRef (@{$_[0]->{port_table}}) {
+            $lldData->{'data'}->[$lldItem]->{'{#ALIAS}'}=$hashRef->{'name'};
+            $lldData->{'data'}->[$lldItem]->{'{#PORTIDX}'}="$hashRef->{'port_idx'}";
+#            $lldData->{'data'}->[$lldItem]->{'{#PSKEYPREFIX}'}="stat.sw-$uswMAC-port_$hashRef->{'port_idx'}-";
+            $lldItem++;
          }
-       $lldItem++;
-    } #foreach;
+         }
+      }
     $resut=to_json($lldData, {utf8 => 1, pretty => 1, allow_nonref => 1});
     print "\n[<]   generated lld:\n\t", Dumper $resut if $globalConfig->{debug} >= DEBUG_HIGH;
     print "\n[-] lldJSONGenerate finished" if $globalConfig->{debug} >= DEBUG_LOW;
