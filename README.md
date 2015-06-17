@@ -7,4 +7,4 @@ Description and short manual on English: <https://github.com/zbx-sadman/unifi_mi
 Description and short manual on Russian: <https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-Russian>
 
 
-My other projects: Zabbuino - Zabbix agent for Arduino https://github.com/zbx-sadman/zabbuino
+My other projects: _Zabbuino_ - Zabbix agent for Arduino https://github.com/zbx-sadman/zabbuino
