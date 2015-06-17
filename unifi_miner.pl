@@ -66,7 +66,7 @@ my $globalConfig = {
    # Where are controller answer. See value of 'unifi.https.port' in /opt/unifi/data/system.properties
    location => "https://127.0.0.1:8443", 
    # Operation object. wlan is exist in any case
-   object => OBJ_UAP, 
+   object => OBJ_WLAN, 
    # Name of your site 
    sitename => "default", 
    # who can read data with API
@@ -74,7 +74,7 @@ my $globalConfig = {
    # His pass
    password => "stat",
    # UniFi controller version
-   version => CONTROLLER_VERSION_4
+   version => CONTROLLER_VERSION_3
   };
 
 
@@ -169,19 +169,39 @@ sub getMetric{
     my $table=$_[0];
     my $tableName;
     my $key=$_[1];
-    my $filterKey;
-    my $filterValue;
-    my $filterUsed;
-    my $filterMatched;
+    my $fKey;
+    my $fValue;
+    my @fData=();
+    my $fDataLen;
+    my $fStr;
+
     print "\n[#]   options: key='$_[1]' action='$globalConfig->{action}'" if $globalConfig->{debug} >= DEBUG_MID;
     print "\n[+]   incoming object info:'\n\t", Dumper $_[0] if $globalConfig->{debug} >= DEBUG_HIGH;
 
     # maybe this code to regexp spliting need rewriten
     ($tableName, $key) = split(/[.]/, $key, 2);
-    # check for [filterkey=value] construction in tableName. If that exist - key filter feature will enabled
-    ($filterKey, $filterValue) = $tableName =~  m/^\[([-_\w]+)=([-_\w\x20]+)\]$/gi;
-    if (defined($filterKey) and defined($filterValue)) {
-         $filterUsed=TRUE;
+
+    
+    # check for [filterkey=value&filterkey=value&...] construction in tableName. If that exist - key filter feature will enabled
+    # regexp matched string placed into $1 and $1 listed as $fStr
+    ($fStr) = $tableName =~ m/^\[([\w]+=.+&{0,1})+\]$/;
+    if ($fStr) {
+      # filterString is exist - need to split its to key=value pairs with '&' separator
+      my @fStrings = split('&', $fStr);
+      # after splitting split again - to key and values. And push it to array
+      foreach my $fStr (@fStrings) {
+         # regexp with key=value format checking
+         # ($fKey, $fValue) = $fStr =~ m/([-_\w]+)=([-_\w\x20]+)/gi;
+
+         # split pair with '=' separator
+         ($fKey, $fValue) = split('=', $fStr);
+         # if key/value splitting was correct - push to filter data array
+         if (defined($fKey) &&  defined($fValue)) {
+            push (@fData, {key => $fKey, value => $fValue});
+           }
+       }
+       # length of filter data array will used later for matching checking
+       $fDataLen = scalar(@fData);
     }
 
     # if key is not defined after split (no comma in key) that mean no table name exist in key and key is first and only one part of splitted data
@@ -204,10 +224,23 @@ sub getMetric{
                   # If need to analyze elements in subtable...
                   # $tableName=something mean that subkey was detected
                   if ($tableName) { 
-                     # Use filter and current object is that need - dive to array element
-                     if ($filterUsed && ( defined($hashRef->{$filterKey}) && ($hashRef->{$filterKey} eq $filterValue))) { 
-#                        print "\n >>> As filter is matched, going to next level with key=$key , hashRef=", Dumper $hashRef, "\n";
+                     # Check for filter using: if filter data array non zero length - test analyzed object with filter. 
+                     if ($fDataLen > 0) {
+                        # Init match counter
+                        my $matchCount=0;
+                        foreach my $fHash (@fData) {
+                          if ( defined($hashRef->{$fHash->{key}}) && ($hashRef->{$fHash->{key}} eq $fHash->{value}))
+                          {
+                             # increase if filter is matched
+                             $matchCount++;
+                             #print "\n >>> $fHash->{key} matched! \n";
+                          }
+                        }
+                        # Number of matches is equal to filter data array (all filters is matched)? Yes - dive to lower level.
+                        if ($matchCount == $fDataLen) {
+                        #print "\n >>> As filter is matched, going to next level with key=$key , hashRef=", Dumper $hashRef, "\n";
                         $paramValue=getMetric($hashRef, $key, $_[2]+1); 
+                        }
                      }
                      else {
                      # Do recursively calling getMetric func with subtable and subkey and get value from it
@@ -353,7 +386,7 @@ sub fetchData {
 #                     # second time try to open cache... if still locked - exit.
 #                     open ($fh, "+<", $cacheFileName) or die "$cacheFileName is possibly locked, aborting";
 #                  }
-               open ($fh, "<", $cacheFileName) or die "$cacheFileName is possibly locked, aborting";
+               open ($fh, "<", $cacheFileName) or die "Can't open $cacheFileName";
                # read data from file
                $jsonData=decode_json(<$fh>);
                # close cache
