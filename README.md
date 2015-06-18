@@ -6,7 +6,7 @@ It a small tool for UniFi Controller data mining for using with Zabbix server
 
 If you have a question about Miner, please, read [English] (<https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-English>) or [Russian] (<https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-Russian>) short manual.
 
-If u still have an problem, you can search the existing closed or open [issues](https://github.com/zbx-sadman/unifi_miner/issues). 
+If u have an problem, you can search the existing closed or open [issues](https://github.com/zbx-sadman/unifi_miner/issues). 
 
 Examples of _UserParameter_ to integration UniFi Miner and Zabbix: [unifi.conf] (https://github.com/zbx-sadman/unifi_miner/blob/master/unifi.conf) 
 
