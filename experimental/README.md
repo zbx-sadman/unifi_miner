@@ -10,12 +10,11 @@
 - Add workaround sub() for converting boolean from `true`/`false` to `1`/`0`.  
 
 ### Notes
-  I expect to slow Miner work for _user_ object on systems with many clients connected through big JSON taking from UniFi controler (~1kb per user).  
-  No different object for users and guests exists because of all clients stored in one JSON-array. 
+  I expect to slow Miner work for _user_ object on systems with many clients connected through big JSON taking from UniFi controler (~1kb per user). No different object for users and guests exists because of all clients stored in one JSON-array. 
  
   _uph_ object have a little metrics and use non-standart keys: `device_id` instead `_id`, for example.
 
-  In some cases Miner return `true`/`false` for boolean JSON-keys, but Zabbix get only `1`/`0` as boolean.
+  In some cases Miner was returned `true`/`false` for boolean JSON-keys, but Zabbix take only `1`/`0` for boolean. It assumedly fixed. 
 
 ### Examples
    Getting LLD for all clients
