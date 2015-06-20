@@ -12,6 +12,8 @@ Examples of _UserParameter_ to integration UniFi Miner and Zabbix: [unifi.conf] 
 
 Templates for UniFi controller **v4** : [Zabbix version >= 2.0 && < 2.4] (https://github.com/zbx-sadman/unifi_miner/blob/master/Zabbix%20templates/UniFi%20Controller%20v4/zbx_Template_UBNT_UniFi_for_Zabbix_v2_0.xml), [Zabbix version >= 2.4] (https://github.com/zbx-sadman/unifi_miner/blob/master/Zabbix%20templates/UniFi%20Controller%20v4/zbx_Template_UBNT_UniFi_for_Zabbix_v2_4.xml)
 
+All new experimental features can be found [here](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental)
+
 
 ### My other projects
  [_Zabbuino_](https://github.com/zbx-sadman/zabbuino) - Zabbix agent for Arduino 
