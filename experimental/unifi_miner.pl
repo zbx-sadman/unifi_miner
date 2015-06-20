@@ -5,6 +5,7 @@
 #
 #  Experimental!
 #
+#BEGIN { $ENV{PERL_JSON_BACKEND} = 'JSON::XS' };
 use strict;
 use warnings;
 #use 5.010;
@@ -51,9 +52,11 @@ sub fetchData;
 sub fetchDataFromController;
 sub lldJSONGenerate;
 sub getMetric;
+sub convert_if_bool;
 
 my %options=();
 getopts("a:c:d:i:k:l:m:n:o:p:s:u:v:", \%options);
+
 
 #########################################################################################################################################
 #
@@ -155,10 +158,6 @@ print "\n" if  $globalConfig->{debug} >= DEBUG_LOW;
 $res="" unless defined ($res);
 # Put result of work to stdout
 print  "$res\n";
-#print Dumper %INC;
-#foreach (keys %INC) {
-#        print $_." => ".$INC{$_}."\n";
-#}
 
 ##################################################################################################################################
 #
@@ -182,7 +181,7 @@ sub getMetric{
     my $fKey;
     my $fValue;
     my @fData=();
-    my $fDataLen;
+    my $fDataLen=0;
     my $fStr;
 
     print "\n[#]   options: key='$_[1]' action='$globalConfig->{action}'" if $globalConfig->{debug} >= DEBUG_MID;
@@ -263,25 +262,25 @@ sub getMetric{
                      # if it just "first-level" key - get it value for next operation (sum/count/etc)                     
                      $paramValue=$hashRef->{$key} if (defined($hashRef->{$key}))
                    }
-                  # need to fix trying sum of not numeric values
-                  # do some math with value - sum or count               
-                  if ($globalConfig->{action} eq ACT_SUM)
+                  if (defined($paramValue))
                      {
-                       $result+=$paramValue if (defined($paramValue));
-                     }
-                  elsif ($globalConfig->{action} eq ACT_COUNT)
-                     {
-                       # Do count if key is exist
-                       $result++ if (defined($paramValue)); 
-                     }
-                  else 
-                     {
-                       # Otherwise (ACT_GET option) - take value and go out from loop
-                           if (defined($paramValue)) {
+                        # need to fix trying sum of not numeric values
+                        # do some math with value - sum or count               
+                        if ($globalConfig->{action} eq ACT_SUM)
+                          {
+                            $result+=$paramValue;
+                          }
+                        elsif ($globalConfig->{action} eq ACT_COUNT)
+                          {
+                            $result++;
+                          }
+                        else 
+                          {
+                            # Otherwise (ACT_GET option) - take value and go out from loop
                            $result=convert_if_bool($paramValue);
                            last;
-                       }
-                     }
+                          }
+                  }
                   print "\n[.] Value=$paramValue, result=$result" if $globalConfig->{debug} >= DEBUG_HIGH;
               }#foreach;
            }
@@ -299,13 +298,14 @@ sub getMetric{
               # Subtable can be not exist as vap_table for UAPs which is powered off.
               # In this case $result must be undefined for properly processed on previous dive level if subroutine is called recursively              
               $result=undef;
-              $result=convert_if_bool($table->{$key}) if ( defined($table->{$key}));
+              $result=$table->{$key} if ( defined($table->{$key}));
+#              $result=convert_if_bool($table->{$key}) if ( defined($table->{$key}));
             }
        }
   print "\n[>] ($_[2]) getMetric finished (" if $globalConfig->{debug} >= DEBUG_LOW;
   print $result if ($globalConfig->{debug} >= DEBUG_LOW && defined($result));
   print ")" if $globalConfig->{debug} >= DEBUG_LOW;
-
+ 
   return $result;
 }
 
@@ -317,14 +317,8 @@ sub getMetric{
 sub convert_if_bool {
    # $_[0] - tested variable
    my $result=$_[0];
-   # if type is boolean, convert true/false || 1/0 => 1/0
-   if (ref $result eq 'JSON::XS::Boolean' || ref $result eq 'JSON::PP::Boolean') {
-      # why using JSON lib in some cases into variables falls string "true" / "false" and in some - number 1/0? 
-      if ($result eq 'true' || $result == TRUE) 
-         {$result=TRUE;}
-      else
-         {$result=FALSE;} 
-    }
+   # if type is boolean, convert true/false || 1/0 => 1/0 with casts to a number by math operation.
+   $result+=0 if (JSON::is_bool($result));
    return $result;
 }
 
@@ -446,10 +440,10 @@ sub fetchData {
 
              # Object with given ID is found, jump out to end of function
              # UBNT Phones use 'device_id' key for ID store ID (?)
-             if (($objectName eq OBJ_UPH) && ($hashRef->{'device_id'} eq $globalConfig->{'id'}))
+             if (($objectName eq OBJ_UPH) && ($hashRef->{'device_id'} eq $globalConfig->{id}))
                 { $result=$hashRef; last; }
              elsif 
-                ($hashRef->{'_id'} eq $globalConfig->{'id'}) { $result=$hashRef; last; }
+                ($hashRef->{'_id'} eq $globalConfig->{id}) { $result=$hashRef; last; }
           } 
 
           # Workaround for object without type key (WLAN for example)
@@ -515,6 +509,9 @@ sub lldJSONGenerate{
            if ($objectName eq OBJ_WLAN) {
                $lldData->{'data'}->[$lldItem]->{'{#ALIAS}'}=$hashRef->{'name'};
                $lldData->{'data'}->[$lldItem]->{'{#ID}'}=$hashRef->{'_id'};
+#               $lldData->{'data'}->[$lldItem]->{'{#ISGUEST}'}=convert_if_bool($hashRef->{'is_guest'});
+               $lldData->{'data'}->[$lldItem]->{'{#ISGUEST}'}=$hashRef->{'is_guest'};
+
            }
            elsif ($objectName eq OBJ_USER ) {
               $lldData->{'data'}->[$lldItem]->{'{#NAME}'}=$hashRef->{'hostname'};
@@ -557,7 +554,7 @@ sub lldJSONGenerate{
          }
          }
       }
-    $resut=to_json($lldData, {utf8 => 1, pretty => 1, allow_nonref => 1});
+    $resut=to_json($lldData, {utf8 => 1, pretty => 1});
     print "\n[<]   generated lld:\n\t", Dumper $resut if $globalConfig->{debug} >= DEBUG_HIGH;
     print "\n[-] lldJSONGenerate finished" if $globalConfig->{debug} >= DEBUG_LOW;
     return $resut;
@@ -615,6 +612,7 @@ sub getJSON {
    die "[!] JSON taking error, HTTP code:", $response->status_line unless $response->is_success;
    print "\n[<]   fetched data:\n\t", Dumper $response->decoded_content if $globalConfig->{debug} >= DEBUG_HIGH;
    my $result=decode_json($response->decoded_content);
+#   my $result=from_json($response->decoded_content,{convert_blessed => 0, utf8 => 1});
    my $jsonData=$result->{data};
    my $jsonMeta=$result->{meta};
    # server answer is ok ?
