@@ -1,14 +1,17 @@
-#!/usr/bin/pperl
+#!/usr/bin/perl
 #
 #  (C) sadman@sfi.komi.com 2015
 #  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some methods and ideas 
 #
 #  Experimental!
 #
+#BEGIN { $ENV{PERL_JSON_BACKEND} = 'JSON::XS' };
 use strict;
 use warnings;
 #use 5.010;
 use JSON qw ();
+#use JSON::XS;
+#use IO::Socket::SSL;
 use LWP qw ();
 use Getopt::Std;
 use Digest::MD5 qw(md5_hex);
@@ -133,7 +136,7 @@ else
         die MSG_UNKNOWN_CONTROLLER_VERSION, $globalConfig->{version};
      }
 
-print "\n[#]   Global config data:\n\t", Dumper $globalConfig if $globalConfig->{debug} >= DEBUG_MID;
+print "\n[#]   Global config data:\n\t", Dumper $globalConfig if ($globalConfig->{debug} >= DEBUG_MID);
 my $res;
 
 # First - check for object name
@@ -157,7 +160,7 @@ if (defined($globalConfig->{null_char}))
  { 
    $res = $res ? $res : $globalConfig->{null_char};
  }
-print "\n" if  $globalConfig->{debug} >= DEBUG_LOW;
+print "\n" if  ($globalConfig->{debug} >= DEBUG_LOW);
 $res="" unless defined ($res);
 # Put result of work to stdout
 print  "$res\n";
@@ -176,21 +179,21 @@ sub getMetric{
     # $_[1] - array/hash with info
     # $_[2] - key
     # $_[3] - dive level
-    print "\n[>] ($_[3]) getMetric started" if $_[0]->{debug} >= DEBUG_LOW;
+    print "\n[>] ($_[3]) getMetric started" if ($_[0]->{debug} >= DEBUG_LOW);
     my $result;
     my $paramValue;
     my $tableName;
     my $key=$_[2];
     my $fKey;
     my $fValue;
-    my $sData;
+    my @fData=();
     my $fDataSize=0;
     my $fStr;
     my $objList;
-    my $gc=$_[0];
+    my $nCnt;
 
-    print "\n[#]   options: key='$_[2]' action='$_[0]->{action}'" if $_[0]->{debug} >= DEBUG_MID;
-    print "\n[+]   incoming object info:'\n\t", Dumper $_[1] if $_[0]->{debug} >= DEBUG_HIGH;
+    print "\n[#]   options: key='$_[2]' action='$_[0]->{action}'" if ($_[0]->{debug} >= DEBUG_MID);
+    print "\n[+]   incoming object info:'\n\t", Dumper $_[1] if ($_[0]->{debug} >= DEBUG_HIGH);
 
     ($tableName, $key) = split(/[.]/, $key, 2);
     # if key is not defined after split (no comma in key) that mean no table name exist in incoming key and key is first and only one part of splitted data
@@ -207,16 +210,14 @@ sub getMetric{
              # filterString is exist - need to split its to key=value pairs with '&' separator
              my @fStrings = split('&', $fStr);
              # after splitting split again - to key and values. And store it.
-             foreach $fStr (@fStrings) {
+             for ($nCnt=0; $nCnt < @fStrings; $nCnt++) {
                 # regexp with key=value format checking
                 # ($fKey, $fValue) = $fStr =~ m/([-_\w]+)=([-_\w\x20]+)/gi;
                 # split pair with '=' separator
-                ($fKey, $fValue) = split('=', $fStr);
+                ($fKey, $fValue) = split('=', $fStrings[$nCnt]);
                 # if key/value splitting was correct - save filter data into hash
-                $sData->{$fKey}=$fValue if (defined($fKey) && defined($fValue));
+                push(@fData, {key=>$fKey, val=> $fValue}) if (defined($fKey) && defined($fValue));
             }
-           # length of filter data array will used later
-           $fDataSize = scalar keys %{$sData};
            # flush tableName's value if tableName is represent filter-key
            undef $tableName;
           }
@@ -229,7 +230,7 @@ sub getMetric{
     if (ref($_[1]) eq 'ARRAY') 
        {
          $objList=@{$_[1]};
-         print "\n[.] Array with ", $objList, " objects detected" if $_[0]->{debug} >= DEBUG_MID;
+         print "\n[.] Array with ", $objList, " objects detected" if ($_[0]->{debug} >= DEBUG_MID);
          # if metric ask "how much items (AP's for example) in all" - just return array size (previously calculated in $result) and do nothing more
          if ($key eq KEY_ITEMS_NUM) 
             {
@@ -237,21 +238,21 @@ sub getMetric{
             }
          else
            {
-#             $result=undef; 
-             print "\n[.] taking value from all sections" if $_[0]->{debug} >= DEBUG_MID;
-             foreach my $jsonObject (@{$_[1]}) {
+             $result=0; 
+             print "\n[.] taking value from all sections" if ($_[0]->{debug} >= DEBUG_MID);
+             for ($nCnt=0; $nCnt < $objList; $nCnt++ ) {
                   # init $paramValue for right actions doing
-                  if ($fDataSize && (!matchObject($jsonObject, $sData))) { next; }
+                  if (@fData && (!matchObject($_[1][$nCnt], \@fData))) { next; }
                   $paramValue=undef;
                   # If need to analyze elements in subtable...
                   # $tableName=something mean that subkey exist
                   if ($tableName) { 
                       # Do recursively calling getMetric func with subtable and subkey and get value from it
-                      $paramValue=getMetric($gc, $jsonObject->{$tableName}, $key, $_[3]+1); 
+                      $paramValue=getMetric($_[0], $_[1][$nCnt]->{$tableName}, $key, $_[3]+1); 
                     }
                  else {
                       # Do recursively calling getMetric func with that table get value of key
-                      $paramValue=getMetric($gc, $jsonObject, $key, $_[3]+1); 
+                      $paramValue=getMetric($_[0], $_[1][$nCnt], $key, $_[3]+1); 
                     }
 
                   if (defined($paramValue))
@@ -273,40 +274,40 @@ sub getMetric{
                            last;
                           }
                   }
-                  print "\n[.] Value=$paramValue, result=$result" if $_[0]->{debug} >= DEBUG_HIGH;
+                  print "\n[.] Value=$paramValue, result=$result" if ($_[0]->{debug} >= DEBUG_HIGH);
               }#foreach;
            }
        }
     else 
        {
          # it is not array. Just get metric value by hash index
-         print "\n[.] Just one object detected - get metric." if $_[0]->{debug} >= DEBUG_MID;
+         print "\n[.] Just one object detected - get metric." if ($_[0]->{debug} >= DEBUG_MID);
          # Subtable can be not exist as vap_table for UAPs which is powered off.
          # In this case $result must be undefined for properly processed on previous dive level if subroutine is called recursively              
 #         $result=undef;
          # Apply filter-key to current object or pass inside if no filter defined
-         if ((!$fDataSize) || matchObject($_[1], $sData))            {
-              print "\n[.] Object is good" if $_[0]->{debug} >= DEBUG_MID;
+         if ((!@fData) || matchObject($_[1], \@fData))            {
+              print "\n[.] Object is good" if ($_[0]->{debug} >= DEBUG_MID);
               if ($tableName && defined($_[1]->{$tableName})) 
                  {
                    # if subkey was detected (tablename is given an exist) - do recursively calling getMetric func with subtable and subkey and get value from it
-                   print "\n[.] It's object. Go inside" if $_[0]->{debug} >= DEBUG_MID;
+                   print "\n[.] It's object. Go inside" if ($_[0]->{debug} >= DEBUG_MID);
                    $result=getMetric($_[0], $_[1]->{$tableName}, $key, $_[3]+1); 
                  } 
               elsif (defined($_[1]->{$key}))
                  {
                    # Otherwise - just return value for given key
-                   print "\n[.] It's key. Take value" if $_[0]->{debug} >= DEBUG_MID;
+                   print "\n[.] It's key. Take value" if ($_[0]->{debug} >= DEBUG_MID);
                    $result=convert_if_bool($_[1]->{$key});
               } else {
-              print "\n[.] No key or table exist :(" if $_[0]->{debug} >= DEBUG_MID;
+              print "\n[.] No key or table exist :(" if ($_[0]->{debug} >= DEBUG_MID);
               }
             }
        }
 
- print "\n[>] ($_[3]) getMetric finished (" if $_[0]->{debug} >= DEBUG_LOW;
+ print "\n[>] ($_[3]) getMetric finished (" if ($_[0]->{debug} >= DEBUG_LOW);
  print $result if ($_[0]->{debug} >= DEBUG_LOW && defined($result));
- print ")" if $_[0]->{debug} >= DEBUG_LOW;
+ print ")" if ($_[0]->{debug} >= DEBUG_LOW);
  
   return $result;
 }
@@ -322,14 +323,12 @@ sub matchObject {
    # Init match counter
    my $matchCount=0;
    my $result=TRUE;
-   my @fKeyList = keys $_[1];
-   my $fKeyListLen = scalar (@fKeyList);
-   if ($fKeyListLen > 0) {
-      foreach my $fHKey (@fKeyList) {
-         # increase if filter is matched
-         $matchCount++ if ( defined($_[0]->{$fHKey}) && ( $_[0]->{$fHKey} eq $_[1]->{$fHKey}));
-         }
-       $result=FALSE unless ($matchCount == $fKeyListLen);
+   my $objListLen=@{$_[1]};
+   if ($objListLen) {
+      for (my $i=0; $i < $objListLen; $i++ ) {
+        $matchCount++ if (defined($_[0]->{$_[1][$i]->{key}}) && ($_[0]->{$_[1][$i]->{key}} eq $_[1][$i]->{val}));
+      }
+      $result=FALSE unless ($matchCount == $objListLen);
    }
    return $result;
 }
@@ -345,9 +344,9 @@ sub convert_if_bool {
    # $_[0] - tested variable
    # if type is boolean, convert true/false || 1/0 => 1/0 with casts to a number by math operation.
    if (JSON::is_bool($_[0]))
-     { return  $_[0]+0 }
+     { return $_[0]+0 }
    else
-     {return  $_[0] }
+     { return $_[0] }
 }
 
 #####################################################################################################################################
@@ -382,7 +381,7 @@ sub fetchData {
       { $objPath="$_[0]->{api_path}/stat/sta"; $checkObjType=FALSE; }
     else { die "[!] Unknown object given"; }
 
-   if (($objectName eq OBJ_UAP) && ($_[0]->{version} eq CONTROLLER_VERSION_4) && $_[0]->{mac})  
+   if (($_[0]->{version} eq CONTROLLER_VERSION_4) && ($objectName eq OBJ_UAP) && $_[0]->{mac})  
       {
          $objPath.="/$_[0]->{mac}"; $v4RapidWay=TRUE;
       }
@@ -466,7 +465,7 @@ sub fetchData {
              if (($objectName eq OBJ_UPH) && ($jsonObject->{'device_id'} eq $_[0]->{id}))
                 { $result=$jsonObject; last; }
              elsif 
-                ($jsonObject->{'_id'} eq $_[0]->{id}) { $result=$jsonObject; last; }
+                ( $jsonObject->{'_id'} eq $_[0]->{id}) { $result=$jsonObject; last; }
           } 
 
           # Workaround for object without type key (WLAN for example)
@@ -604,15 +603,24 @@ sub unifiLogin {
    print "\n[#]  options path='$_[0]->{login_path}' type='$_[0]->{login_type}' data='$_[0]->{login_data}'" if ($_[0]->{debug} >= DEBUG_MID);
    my $response=$_[1]->post($_[0]->{login_path}, 'Content_type' => "application/$_[0]->{login_type}", 'Content' => $_[0]->{login_data});
    print "\n[<]  HTTP respose:\n\t", Dumper $response if ($_[0]->{debug} >= DEBUG_HIGH);
-   # v3 return 'OK' (code 200) on wrong auth
-   die "\n[!] Login error:", $response->code if ($response->is_success && ($_[0]->{version} eq CONTROLLER_VERSION_3));
-   # v3 return 'Redirect' (code 302) on success login
-   die "\n[!] Other HTTP error:", $response->code if ($response->code ne '302' && ($_[0]->{version} eq CONTROLLER_VERSION_3));
 
-   # v4 return 'Bad request' (code 400) on wrong auth
-   die "\n[!] Login error:" if ($response->code eq '400' && ($_[0]->{version} eq CONTROLLER_VERSION_4));
-   # v4 return 'OK' (code 200) on success login
-   die "\n[!] Other HTTP error:", $response->code if ($response->is_error && ($_[0]->{version} eq CONTROLLER_VERSION_4));
+   if ($_[0]->{version} eq CONTROLLER_VERSION_4) 
+      {
+         # v4 return 'Bad request' (code 400) on wrong auth
+         die "\n[!] Login error:" if ($response->code eq '400');
+         # v4 return 'OK' (code 200) on success login and must die only if get error
+         die "\n[!] Other HTTP error:", $response->code if ($response->is_error);
+      }
+   elsif ($_[0]->{version} eq CONTROLLER_VERSION_3) {
+        # v3 return 'OK' (code 200) on wrong auth
+        die "\n[!] Login error:", $response->code if ($response->is_success );
+        # v3 return 'Redirect' (code 302) on success login and must die only if code<>302
+        die "\n[!] Other HTTP error:", $response->code if ($response->code ne '302');
+      }
+   else {
+      # v2 code
+      ;
+       }
    print "\n[-] unifiLogin finished successfully" if ($_[0]->{debug} >= DEBUG_LOW);
    return  $response->code;
 }
