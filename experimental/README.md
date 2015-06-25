@@ -1,5 +1,16 @@
 # Experimental place
 
+### 25.06.2015
+- Rewritten cache renew procedure to reduce runtime and avoid race condition;
+- Added subroutine for store statistic info into file;
+
+#### Notes
+
+For using statistic store feature you need to install `cpan Time::HiRes` (or `aptitude install libtime-hires-perl`) module and set needful values for _statfile_, _writestat_ variables. _Time::HiRes_ allow to get right time of Miner's internal subroutines execution (result not include time speded to perl modules init). If not required to use this feature, you can remark `use Time::HiRes` and set _writestat_ to FALSE inside Miner code. Then you could accelerate Miner a little.
+
+Now i was reach time of execution ~0m0.020s (with using PPerl) vice ~0m0.110s (with old code and without PPerl) on my virtual linux box, which hosted UniFi Controller. Command to measure is `time ./unifi_miner.pl -o uap  -k "vap_table.[is_guest=1].is_guest" -a sum`.
+
+
 ### 23.06.2015
 - Fixed wrong filter-key handling;
 - Fixed JSON::XS integration problems;
