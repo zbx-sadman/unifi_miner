@@ -487,8 +487,8 @@ sub fetchData {
                     # Unlink temp filename from filedata. 
                     # Process, that open temporary cache file can do something with filedata while file not closed
                     unlink $tmpCacheFileName  or die "\n $tmpCacheFileName unlink error \n";
-                    # Unlock temporary file 
-                    flock ($fh, 8) or die "\n unlock error \n";
+                    # Not need Unlock temporary file separatly, close() do it by himself 
+                    # flock ($fh, 8) or die "\n unlock error \n";
                     # Close temporary file. 
                     close $fh;
                     # No cache read from file need
