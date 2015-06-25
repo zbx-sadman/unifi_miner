@@ -16,7 +16,7 @@ use Getopt::Std;
 use Data::Dumper;
 use JSON qw ();
 use LWP qw ();
-
+use Time::HiRes qw(clock_gettime CLOCK_REALTIME);
 
 
 
@@ -55,11 +55,7 @@ sub lldJSONGenerate;
 sub getMetric;
 sub convert_if_bool;
 sub matchObject;
-
-my $maxDepth=0;
-my @objJSON=();
-my %options;
-getopts("a:c:d:i:k:l:m:n:o:p:s:u:v:", \%options);
+sub writeStat;
 
 
 #########################################################################################################################################
@@ -75,21 +71,47 @@ my $globalConfig = {
    # Where are store cache file. Better place is RAM-disk
    cacheroot=> '/run/shm', 
    # Debug level 
-   debug => 0,
+   debug => FALSE,
+   # ID of object (usually defined thru -i option)
+   id => '',
+   # key for count/get/sum acions
+   key => '',
    # Where are controller answer. See value of 'unifi.https.port' in /opt/unifi/data/system.properties
    location => "https://127.0.0.1:8443", 
+   # MAC of object (usually defined thru -m option)
+   mac => '',
    # Operation object. wlan is exist in any case
    object => OBJ_WLAN, 
    # Name of your site 
    sitename => "default", 
+   # Where to store statistic data
+   statfile => './stat.txt',
    # who can read data with API
    username => "stat",
    # His pass
    password => "stat",
    # UniFi controller version
-   version => CONTROLLER_VERSION_4
+   version => CONTROLLER_VERSION_4,
+   # Write statistic to _statfile_ or not
+   writestat => FALSE,
+
+   # HiRes time of Miner internal processing start (not include Module Init stage)
+   starttime => clock_gettime(CLOCK_REALTIME),
+   # HiRes time of Miner internal processing stop
+   stoptime => 0,
+   # Level of dive (recursive call) for getMetric subroutine
+   divelevel => 1,
+   # Max level to which getMetric is dived
+   maxdepth => 0,
+   # 
+   downloaded => FALSE
   };
 
+$globalConfig->{'starttime'}=clock_gettime(CLOCK_REALTIME) if ($globalConfig->{'writestat'});
+
+my @objJSON=();
+my %options;
+getopts("a:c:d:i:k:l:m:n:o:p:s:u:v:", \%options);
 
 # Rewrite default values by command line arguments
 $globalConfig->{action}       = $options{a} if defined $options{a};
@@ -145,7 +167,7 @@ if ($globalConfig->{object}) {
        # if $globalConfig->{id} is exist then metric of this object has returned. 
        # If not calculate $globalConfig->{action} for all items in objects list (all object of type = 'object name', for example - all 'uap'
        fetchData($globalConfig, \@objJSON);
-       $res=getMetric($globalConfig, \@objJSON, $globalConfig->{key}, 1, $maxDepth);
+       $res=getMetric($globalConfig, \@objJSON, $globalConfig->{key});
      }
    else
      { 
@@ -165,22 +187,45 @@ $res="" unless defined ($res);
 # Put result of work to stdout
 print  "$res\n";
 
+# Write stat to file
+if ($globalConfig->{'writestat'}) {
+   $globalConfig->{'stoptime'} = clock_gettime(CLOCK_REALTIME);
+   writeStat($globalConfig);
+}
+
 ##################################################################################################################################
 #
 #  Subroutines
 #
 ##################################################################################################################################
 
+#####################################################################################################################################
 #
-# 
+#  Write statistic to file. Fields separated by commas.
 #
-sub getMetric{
+#####################################################################################################################################
+sub writeStat {
+    # $_[0] - GlobalConfig
+    open (my $fh, ">>", $_[0]->{statfile}) or die "Could not open $_[0]->{statfile} for storing statistic info";
+    # chmod 0666, $fh;
+    print $fh "$_[0]->{starttime},$_[0]->{stoptime},$_[0]->{version},$_[0]->{sitename},$_[0]->{object},$_[0]->{id},$_[0]->{mac},$_[0]->{key},$_[0]->{action},$_[0]->{maxdepth},$_[0]->{downloaded},$_[0]->{debug}\n";
+    close $fh;
+}
+
+#####################################################################################################################################
+#
+#  Recursively go through the key and take/form value of metric
+#
+#####################################################################################################################################
+sub getMetric {
     # $_[0] - GlobalConfig
     # $_[1] - array/hash with info
     # $_[2] - key
-    # $_[3] - dive level
-    # $_[4] - max depth
-    print "\n[>] ($_[3]) getMetric started" if ($_[0]->{debug} >= DEBUG_LOW);
+
+    # dive to...
+    $_[0]->{'divelevel'}++;
+
+    print "\n[>] ($_[0]->{'divelevel'}) getMetric started" if ($_[0]->{debug} >= DEBUG_LOW);
     my $result;
     my $key=$_[2];
 
@@ -188,8 +233,9 @@ sub getMetric{
     print "\n[+]   incoming object info:'\n\t", Dumper $_[1] if ($_[0]->{debug} >= DEBUG_HIGH);
 
     # correcting maxDepth for ACT_COUNT operation
-    $_[4] = ($_[3] > $_[4]) ? $_[3] : $_[4];
-
+#    $_[4] = ($_[3] > $_[4]) ? $_[3] : $_[4];
+    $_[0]->{'maxdepth'} = ($_[0]->{'divelevel'} > $_[0]->{'maxdepth'}) ? $_[0]->{'divelevel'} : $_[0]->{'maxdepth'};
+    
     # Checking for type of $_[1].
     # Array must be explored for key value in each element
     # if $_[0] is array...
@@ -209,7 +255,7 @@ sub getMetric{
                   # init $paramValue for right actions doing
                   $paramValue=undef;
                   # Do recursively calling getMetric func with subtable and subkey and get value from it
-                  $paramValue=getMetric($_[0], $_[1][$i], $key, $_[3]+1, $_[4]); 
+                  $paramValue=getMetric($_[0], $_[1][$i], $key); 
                   print "\n[.] paramValue=$paramValue" if ($_[0]->{debug} >= DEBUG_MID);
 
                   if ($_[0]->{action} eq ACT_GET) 
@@ -228,7 +274,7 @@ sub getMetric{
                             # workaround for correct counting with deep diving
                             # we must count keys in that objects, what placed only inside last level table
                             # in other case $result will be incremented by $paramValue (which is number of key in objects inside last level table)
-                            if ($_[4]-$_[3] < 2 ) 
+                            if (($_[0]->{'maxdepth'}-$_[0]->{'divelevel'}) < 2 ) 
                               { $result++; }
                             else 
                               { $result+=$paramValue; }
@@ -284,7 +330,7 @@ sub getMetric{
                  {
                    # if subkey was detected (tablename is given an exist) - do recursively calling getMetric func with subtable and subkey and get value from it
                    print "\n[.] It's object. Go inside" if ($_[0]->{debug} >= DEBUG_MID);
-                   $result=getMetric($_[0], $_[1]->{$tableName}, $key, $_[3]+1, $_[4]); 
+                   $result=getMetric($_[0], $_[1]->{$tableName}, $key); 
                  } 
               elsif (defined($_[1]->{$key}))
                  {
@@ -300,16 +346,19 @@ sub getMetric{
             }
        }
 
-  print "\n[>] ($_[3]) getMetric finished (" if ($_[0]->{debug} >= DEBUG_LOW);
+  print "\n[>] ($_[0]->{'divelevel'}]) getMetric finished (" if ($_[0]->{debug} >= DEBUG_LOW);
   print $result if ($_[0]->{debug} >= DEBUG_LOW && defined($result));
-  print ") /$_[4]/ " if ($_[0]->{debug} >= DEBUG_LOW);
- 
+  print ") /$_[0]->{'maxdepth'}/ " if ($_[0]->{debug} >= DEBUG_LOW);
+
+  #float up...
+  $_[0]->{'divelevel'}--;
+
   return $result;
 }
 
 #####################################################################################################################################
 #
-#  
+#  Check the JSON object for a match with the list of filters
 #
 #####################################################################################################################################
 sub matchObject {
@@ -365,6 +414,7 @@ sub fetchData {
    my $cacheFileName;
    my $jsonLen;
    my $objID;
+   my $needReadCache=TRUE;
 
    #
    my $objectName=$_[0]->{object};
@@ -414,38 +464,48 @@ sub fetchData {
          if ($cacheExpire)
             {
                print "\n[.] Cache expire or not found. Renew..." if ($_[0]->{debug} >= DEBUG_MID);
-               # here we need to call login/fetch/logout chain
-               $jsonData=fetchDataFromController($_[0], $objPath);
-               #
                $tmpCacheFileName=$cacheFileName . ".tmp";
                print "\n[.]   temporary cache file=$tmpCacheFileName" if ($_[0]->{debug} >= DEBUG_MID);
-               open ($fh, "+>", $tmpCacheFileName) or die "Could not write to $tmpCacheFileName";
-               chmod 0666, $fh;
-#               sysopen ($fh,$cacheFileName, O_RDWR|O_CREAT|O_TRUNC, 0777) or die "Could not write to $cacheFileName";
-               # lock file for monopoly mode write and push data
-               # can i use O_EXLOCK flag into sysopen?
-
-               # if script can lock cache temp file - write data, close and rename it to proper name
-               if (flock ($fh, 2))
+               open ($fh, ">", $tmpCacheFileName);# or die "Could open not $tmpCacheFileName to write";
+               # try to lock temporary cache file and no wait for locking.
+               # LOCK_EX | LOCK_NB
+               if (flock ($fh, 2 | 4))
                   {
-#                     print $fh $coder->encode($jsonData);
-                     print $fh JSON::encode_json($jsonData);
-                     close $fh;
-                     rename $tmpCacheFileName, $cacheFileName;
-                  }
-               else
-                  {
-                     # can't lock - just close and use fetched json data for work
-                     close $fh;
-                  }
+                    # if Miner could lock temporary file, it...
+                    chmod 0666, $fh;
 
+                    # ...fetch new data from controller...
+                    $jsonData=fetchDataFromController($_[0], $objPath);
+                    # ...write it to temp file..
+                    print $fh JSON::encode_json($jsonData);
+                    # Now unlink old cache filedata from cache filename 
+                    # All processes, who already read data - do not stop and successfully completed reading
+                    unlink $cacheFileName;
+                    # Link name of cache file to temp filedata. Filedata will be have two link - to cache and to temporary cache filenames. 
+                    # New run down processes can get access to data by cache filename
+                    link $tmpCacheFileName, $cacheFileName  or die "\n link error \n";
+                    # Unlink temp filename from filedata. 
+                    # Process, that open temporary cache file can do something with filedata while file not closed
+                    unlink $tmpCacheFileName  or die "\n $tmpCacheFileName unlink error \n";
+                    # Unlock temporary file 
+                    flock ($fh, 8) or die "\n unlock error \n";
+                    # Close temporary file. 
+                    close $fh;
+                    # No cache read from file need
+                    $needReadCache=FALSE;
+                  }
+              else
+                 {
+                    close $fh;
+                 }
             }
-          else
+           # if need load data from cache file
+           if ($needReadCache)
             {
+               # open file
                open ($fh, "<", $cacheFileName) or die "Can't open $cacheFileName";
                # read data from file
                $jsonData=JSON::decode_json(<$fh>);
-#               $jsonData=$coder->decode(<$fh>);
                # close cache
                close $fh;
             }
@@ -458,7 +518,7 @@ sub fetchData {
      # Test object type or pass if 'obj-have-no-type' workaround (wor WLAN, for example)
      next if ($checkObjType && (@{$jsonData}[$nCnt]->{type} ne $_[0]->{object}));
      # ID is given by command-line?
-     unless (defined($_[0]->{id}))
+     unless ($_[0]->{id})
        {
          # No ID given. Push all object which have correct type
          push (@{$_[1]}, @{$jsonData}[$nCnt]);
@@ -511,6 +571,7 @@ sub fetchDataFromController {
    print "\n[*] Logout from UniFi controller" if  ($_[0]->{debug} >= DEBUG_LOW);
    unifiLogout($_[0], $ua);
    print "\n[-] fetchDataFromController finished" if ($_[0]->{debug} >= DEBUG_LOW);
+   $_[0]->{'downloaded'}=TRUE;
    return $result;
 }
 
@@ -532,7 +593,7 @@ sub lldJSONGenerate{
     if (defined($_[1])) 
        {
         # temporary workaround for handle USW ports 
-        if (defined($_[0]->{id}))
+        if ($_[0]->{id})
         {
           my $lldItem=0;
           if ($objectName eq OBJ_USW) {
