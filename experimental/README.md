@@ -1,6 +1,8 @@
 # Experimental place
 
 ### 25.06.2015
+- Rewritten getMetric procedure;
+- Rewritten JSON load code;
 - Rewritten cache renew procedure to reduce runtime and avoid race condition;
 - Added subroutine for store statistic info into file;
 
