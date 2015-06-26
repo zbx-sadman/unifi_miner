@@ -152,7 +152,7 @@ if ($globalConfig->{'version'} eq CONTROLLER_VERSION_4) {
 print "\n[#]   Global config data:\n\t", Dumper $globalConfig if ($globalConfig->{'debug'} >= DEBUG_MID);
 
 # First - check for object type. ...but its always defined in 'my $globalConfig {' section
-#if ($globalConfig->{'object'}) {
+if ($globalConfig->{'object'}) {
    # load JSON data
    fetchData($globalConfig, \@objJSON);
    # Ok. Type is defined. How about key?
@@ -165,7 +165,7 @@ print "\n[#]   Global config data:\n\t", Dumper $globalConfig if ($globalConfig-
        # Key is null - going generate LLD-like JSON from loaded data
        $res=lldJSONGenerate($globalConfig, \@objJSON);
    }
-#}
+}
 
 # Value could be 'null'. If need to replace null to other char - {'null_char'} must be defined
 $res = $res ? $res : $globalConfig->{'null_char'} if (defined($globalConfig->{'null_char'}));
@@ -330,7 +330,7 @@ sub getMetric {
 
   print "\n[>] ($_[0]->{'dive_level'}]) getMetric finished (" if ($_[0]->{'debug'} >= DEBUG_LOW);
   print $result if ($_[0]->{'debug'} >= DEBUG_LOW && defined($result));
-  print ") /$_[0]->{'maxdepth'}/ " if ($_[0]->{'debug'} >= DEBUG_LOW);
+  print ") /$_[0]->{'max_depth'}/ " if ($_[0]->{'debug'} >= DEBUG_LOW);
 
   #float up...
   $_[0]->{'dive_level'}--;
@@ -590,8 +590,8 @@ sub lldJSONGenerate{
             if ($objectName eq OBJ_WLAN) {
                $result->[$i]={'{#ALIAS}' => $_[1][$i]->{'name'}};
                $result->[$i]->{'{#ID}'}=$_[1][$i]->{'_id'};
-               $result->[$i]->{'{#ISGUEST}'}=convert_if_bool($_[1][$i]->{'is_guest'});
-               $result->[$i]->{'{#ISGUEST}'}=$_[1][$i]->{'is_guest'};
+#               $result->[$i]->{'{#ISGUEST}'}=convert_if_bool($_[1][$i]->{'is_guest'});
+#               $result->[$i]->{'{#ISGUEST}'}=$_[1][$i]->{'is_guest'};
            } elsif ($objectName eq OBJ_USER ) {
               $result->[$i]->{'{#NAME}'}=$_[1][$i]->{'hostname'};
               $result->[$i]->{'{#ID}'}=$_[1][$i]->{'_id'};
