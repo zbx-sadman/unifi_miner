@@ -14,9 +14,9 @@ use warnings;
 use Getopt::Std;
 #use Digest::MD5 qw(md5_hex);
 use Data::Dumper;
-use JSON qw ();
-use LWP qw ();
-use Time::HiRes qw(clock_gettime CLOCK_REALTIME);
+use JSON ();
+use LWP ();
+use Time::HiRes qw (clock_gettime CLOCK_REALTIME);
 
 
 
@@ -233,7 +233,6 @@ sub getMetric {
     print "\n[+]   incoming object info:'\n\t", Dumper $_[1] if ($_[0]->{debug} >= DEBUG_HIGH);
 
     # correcting maxDepth for ACT_COUNT operation
-#    $_[4] = ($_[3] > $_[4]) ? $_[3] : $_[4];
     $_[0]->{'maxdepth'} = ($_[0]->{'divelevel'} > $_[0]->{'maxdepth'}) ? $_[0]->{'divelevel'} : $_[0]->{'maxdepth'};
     
     # Checking for type of $_[1].
@@ -448,6 +447,8 @@ sub fetchData {
          # change all [:/.] to _ to make correct file name
          ($cacheFileName = $objPath) =~ tr/\/\:\./_/;
          $cacheFileName = $_[0]->{cacheroot} .'/'. $cacheFileName;
+         # Cache filename point to dir? If so - die to avoid problem with read or link/unlink operations
+         die "Can't handle dir as $cacheFileName" if (-d $cacheFileName);
          print "\n[.] Cache file name: $cacheFileName\n" if ($_[0]->{debug} >= DEBUG_MID);
          # Cache file is exist and non-zero size?
          if (-e $cacheFileName && -s $cacheFileName) 
@@ -465,6 +466,8 @@ sub fetchData {
             {
                print "\n[.] Cache expire or not found. Renew..." if ($_[0]->{debug} >= DEBUG_MID);
                $tmpCacheFileName=$cacheFileName . ".tmp";
+               # Temporary cache filename point to dir? If so - die to avoid problem with write or link/unlink operations
+               die "Can't handle dir as $tmpCacheFileName" if (-d $cacheFileName);
                print "\n[.]   temporary cache file=$tmpCacheFileName" if ($_[0]->{debug} >= DEBUG_MID);
                open ($fh, ">", $tmpCacheFileName);# or die "Could open not $tmpCacheFileName to write";
                # try to lock temporary cache file and no wait for locking.
@@ -478,18 +481,23 @@ sub fetchData {
                     $jsonData=fetchDataFromController($_[0], $objPath);
                     # ...write it to temp file..
                     print $fh JSON::encode_json($jsonData);
+                    # save previous selected filehandler
+                    my $oldFH = select($fh); 
+                    # autoflush on for opened temporary file. If do not flush buffers - another instance can get cache file with part of JSON 
+                    # (HDD buffered outhut issue)
+                    $|++;
+                    # restore filehandler
+                    select($oldFH);
                     # Now unlink old cache filedata from cache filename 
                     # All processes, who already read data - do not stop and successfully completed reading
                     unlink $cacheFileName;
-                    # Link name of cache file to temp filedata. Filedata will be have two link - to cache and to temporary cache filenames. 
+                    # Link name of cache file to temp file. File will be have two link - to cache and to temporary cache filenames. 
                     # New run down processes can get access to data by cache filename
                     link $tmpCacheFileName, $cacheFileName  or die "\n link error \n";
-                    # Unlink temp filename from filedata. 
+                    # Unlink temp filename from file. 
                     # Process, that open temporary cache file can do something with filedata while file not closed
                     unlink $tmpCacheFileName  or die "\n $tmpCacheFileName unlink error \n";
-                    # Not need Unlock temporary file separatly, close() do it by himself 
-                    # flock ($fh, 8) or die "\n unlock error \n";
-                    # Close temporary file. 
+                    # Close temporary file. close() unlock filehandle.
                     close $fh;
                     # No cache read from file need
                     $needReadCache=FALSE;
