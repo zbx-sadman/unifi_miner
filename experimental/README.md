@@ -19,7 +19,7 @@ How to replace old edition of UniFi Miner accelerated with PPerlto new:
 3. Copy new edition to dir, which contain old file: `cp .../new/unifi_miner.pl cp .../bin/zabbix/unifi_miner.pl`
 4. Start Zabbix agent `service zabbix-agent start`
 
-If u have not highload system or not afraid to get temporary unsupported items in Zabbix, you can do the steps in the following order: 3, 2 and skip 1 and 4.
+If u have not highload system or not afraid to get temporary unsupported items in Zabbix, you can do the steps in the following order: 3, 2 and skip 1, 4.
 
 
 ### 23.06.2015
