@@ -10,7 +10,7 @@
 
 For using statistic store feature you need to install `cpan Time::HiRes` (or `aptitude install libtime-hires-perl`) module and set needful values for _statfile_, _writestat_ variables. _Time::HiRes_ allow to get right time of Miner's internal subroutines execution (result not include time speded to perl modules init). If not required to use this feature, you can remark `use Time::HiRes` and set _writestat_ to FALSE inside Miner code. Then you could accelerate Miner a little.
 
-Now i was reach time of once execution ~0m0.020s (with new code and using PPerl, data from cache) vice ~0m0.120s (with old code and without PPerl, data from cache) on my virtual linux box, which hosted UniFi Controller. Command to measure is `time ./unifi_miner.pl -o uap  -k "vap_table.[is_guest=1].is_guest" -a sum`.
+Now i was reach time of once execution ~0m0.020s (with new code and using PPerl, data from cache, no Zabbix agent worked) vice ~0m0.120s (with old code and without PPerl, data from cache, no Zabbix agent worked) on my virtual linux box, which hosted UniFi Controller. Command to measure is `time ./unifi_miner.pl -o uap  -k "vap_table.[is_guest=1].is_guest" -a sum`. 
 
 How to replace old edition of UniFi Miner accelerated with PPerl to new: 
 
@@ -18,9 +18,6 @@ How to replace old edition of UniFi Miner accelerated with PPerl to new:
 2. Kill all instances of Miner that are running on your computer under zabbix account: `kill $(ps a -u zabbix -o pid,args | grep unifi_miner.pl | awk '{print $1}')`
 3. Copy new edition to dir, which contain old file: `cp .../new/unifi_miner.pl cp .../bin/zabbix/unifi_miner.pl`
 4. Start Zabbix agent `service zabbix-agent start`
-
-If u have not highload system or not afraid to get temporary unsupported items in Zabbix, you can do the steps in the following order: 3, 2 and skip 1, 4.
-
 
 ### 23.06.2015
 - Fixed wrong filter-key handling;
