@@ -12,6 +12,15 @@ For using statistic store feature you need to install `cpan Time::HiRes` (or `ap
 
 Now i was reach time of once execution ~0m0.020s (with new code and using PPerl, data from cache) vice ~0m0.120s (with old code and without PPerl, data from cache) on my virtual linux box, which hosted UniFi Controller. Command to measure is `time ./unifi_miner.pl -o uap  -k "vap_table.[is_guest=1].is_guest" -a sum`.
 
+How to replace old edition of UniFi Miner accelerated with PPerlto new: 
+
+1. Stop Zabbix agent: `service zabbix-agent stop`
+2. Kill all instances of Miner that are running on your computer under zabbix account: `kill $(ps a -u zabbix -o pid,args | grep unifi_miner.pl | awk '{print $1}')`
+3. Copy new edition to dir, which contain old file: `cp .../new/unifi_miner.pl cp .../bin/zabbix/unifi_miner.pl`
+4. Start Zabbix agent `service zabbix-agent start`
+
+If u have not highload system or not afraid to get temporary unsupported items in Zabbix, you can do the steps in the following order: 3, 2 and skip 1 and 4.
+
 
 ### 23.06.2015
 - Fixed wrong filter-key handling;
