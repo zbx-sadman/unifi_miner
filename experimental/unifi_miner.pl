@@ -7,20 +7,23 @@
 #
 use strict;
 use warnings;
-#use IO::Socket::SSL;
 use Getopt::Std;
 use Data::Dumper;
 use JSON ();
 use LWP ();
 use Time::HiRes ('clock_gettime', 'CLOCK_REALTIME');
 
-
+# uncomment for fix 'SSL23_GET_SERVER_HELLO:unknown' error
+#use IO::Socket::SSL;
+#IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => Net::SSLeay::VERIFY_NONE()));
 
 use constant {
      ACT_COUNT => 'count',
      ACT_SUM => 'sum',
      ACT_GET => 'get',
      ACT_DISCOVERY => 'discovery',
+     BY_CMD => 1,
+     BY_GET => 2,
      CONTROLLER_VERSION_2 => 'v2',
      CONTROLLER_VERSION_3 => 'v3',
      CONTROLLER_VERSION_4 => 'v4',
@@ -36,23 +39,21 @@ use constant {
      OBJ_USG => 'usg',
      OBJ_WLAN => 'wlan',
      OBJ_USER => 'user',
+     OBJ_SITE => 'site',
      TRUE => 1,
      FALSE => 0,
 
 };
 
 
-sub getJSON;
-sub unifiLogin;
-sub unifiLogout;
 sub fetchData;
 sub fetchDataFromController;
-sub lldJSONGenerate;
+sub makeLLD;
+sub addToLLD;
 sub getMetric;
 sub convert_if_bool;
 sub matchObject;
 sub writeStat;
-
 
 #########################################################################################################################################
 #
@@ -78,8 +79,8 @@ my $globalConfig = {
    mac => '',
    # Operation object. wlan is exist in any case
    object => OBJ_WLAN, 
-   # Name of your site 
-   sitename => 'default', 
+   # Name of your site. Used 'default' if defined as empty and -s option not used
+   sitename => '', 
    # Where to store statistic data
    stat_file => './stat.txt',
    # who can read data with API
@@ -91,6 +92,11 @@ my $globalConfig = {
    # Write statistic to _statfile_ or not
    write_stat => FALSE,
 
+   #####################################################################################################
+   ###
+   ###  Service keys here. Do not change.
+   ###
+   #####################################################################################################
    # HiRes time of Miner internal processing start (not include Module Init stage)
    start_time => clock_gettime(CLOCK_REALTIME),
    # HiRes time of Miner internal processing stop
@@ -99,8 +105,16 @@ my $globalConfig = {
    dive_level => 1,
    # Max level to which getMetric is dived
    max_depth => 0,
-   # 
-   downloaded => FALSE
+   # Data is downloaded instead readed from file
+   downloaded => FALSE,
+   # LWP::UserAgent object, which must be saved between fetchData() calls
+   ua => undef,
+   # Already logged sign
+   logged_in => FALSE,
+   # Sitename which replaced {'sitename'} if '-s' option not used
+   default_sitename => 'default', 
+   # -s option used sign
+   sitename_given => FALSE, 
   };
 
 $globalConfig->{'start_time'}=clock_gettime(CLOCK_REALTIME) if ($globalConfig->{'write_stat'});
@@ -126,46 +140,85 @@ $globalConfig->{'sitename'}      = $options{s} if defined $options{s};
 $globalConfig->{'username'}      = $options{u} if defined $options{u};
 $globalConfig->{'version'}       = $options{v} if defined $options{v};
 
+# -s option used -> use sitename other, that sitename='default' in *LLD() subs
+$globalConfig->{'sitename_given'}= (defined $options{s});
+$globalConfig->{'sitename'}      = $globalConfig->{'default_sitename'} unless (defined $options{s} || $globalConfig->{'sitename'});
+
 # Set controller version specific data
 if ($globalConfig->{'version'} eq CONTROLLER_VERSION_4) {
-   $globalConfig->{'api_path'}="$globalConfig->{'location'}/api/s/$globalConfig->{'sitename'}";
+   $globalConfig->{'api_path'}="$globalConfig->{'location'}/api";
    $globalConfig->{'login_path'}="$globalConfig->{'location'}/api/login";
    $globalConfig->{'login_data'}="{\"username\":\"$globalConfig->{'username'}\",\"password\":\"$globalConfig->{'password'}\"}";
    $globalConfig->{'login_type'}='json';
    $globalConfig->{'logout_path'}="$globalConfig->{'location'}/logout";
+   # Data fetch rules. 
+   # BY_GET mean that data fetched by HTTP GET from .../api/[s/<site>/]{'path'} operation.
+   #    [s/<site>/] must be excluded from path if {'excl_sitename'} is defined
+   # BY_CMD say that data fetched by HTTP POST {'cmd'} to .../api/[s/<site>/]{'path'}
+   #
+   $globalConfig->{'fetch_rules'}= { 
+     # `&` let use value of constant, otherwise we have 'OBJ_UAP' => {...} instead 'uap' => {...}
+     &OBJ_SITE => {'method' => BY_GET, 'path' => 'self/sites', 'excl_sitename' => TRUE},
+     &OBJ_USW  => {'method' => BY_GET, 'path' => 'stat/device'},
+     &OBJ_UPH  => {'method' => BY_GET, 'path' => 'stat/device'},
+     &OBJ_UAP  => {'method' => BY_GET, 'path' => 'stat/device'},
+     &OBJ_USG  => {'method' => BY_GET, 'path' => 'stat/device'},
+     &OBJ_WLAN => {'method' => BY_GET, 'path' => 'list/wlanconf'},
+     &OBJ_USER => {'method' => BY_GET, 'path' => 'stat/sta'}
+   };
 } elsif ($globalConfig->{'version'} eq CONTROLLER_VERSION_3) {
-   $globalConfig->{'api_path'}="$globalConfig->{'location'}/api/s/$globalConfig->{'sitename'}";
+   $globalConfig->{'api_path'}="$globalConfig->{'location'}/api";
    $globalConfig->{'login_path'}="$globalConfig->{'location'}/login";
    $globalConfig->{'login_data'}="username=$globalConfig->{'username'}&password=$globalConfig->{'password'}&login=login";
    $globalConfig->{'login_type'}='x-www-form-urlencoded';
    $globalConfig->{'logout_path'}="$globalConfig->{'location'}/logout";
+   $globalConfig->{'fetch_rules'}= { 
+     # `&` let use value of constant, otherwise we have 'OBJ_UAP' => {...} instead 'uap' => {...}
+     &OBJ_SITE => {'method' => BY_CMD, 'path' => 'cmd/sitemgr', 'cmd' => '{"cmd":"get-sites"}'},
+     &OBJ_USW  => {'method' => BY_GET, 'path' => 'stat/device'},
+     &OBJ_UPH  => {'method' => BY_GET, 'path' => 'stat/device'},
+     &OBJ_UAP  => {'method' => BY_GET, 'path' => 'stat/device'},
+     &OBJ_USG  => {'method' => BY_GET, 'path' => 'stat/device'},
+     &OBJ_WLAN => {'method' => BY_GET, 'path' => 'list/wlanconf'},
+     &OBJ_USER => {'method' => BY_GET, 'path' => 'stat/sta'}
+   };
 } elsif ($globalConfig->{'version'} eq CONTROLLER_VERSION_2) {
    $globalConfig->{'api_path'}="$globalConfig->{'location'}/api";
    $globalConfig->{'login_path'}="$globalConfig->{'location'}/login";
    $globalConfig->{'login_data'}="username=$globalConfig->{'username'}&password=$globalConfig->{'password'}&login=login";
    $globalConfig->{'login_type'}='x-www-form-urlencoded';
    $globalConfig->{'logout_path'}="$globalConfig->{'location'}/logout";
+   $globalConfig->{'fetch_rules'}= { 
+     # `&` let use value of constant, otherwise we have 'OBJ_UAP' => {...} instead 'uap' => {...}
+     &OBJ_UAP  => {'method' => BY_GET, 'path' => 'stat/device', 'excl_sitename' => TRUE},
+     &OBJ_WLAN => {'method' => BY_GET, 'path' => 'list/wlanconf', 'excl_sitename' => TRUE},
+     &OBJ_USER => {'method' => BY_GET, 'path' => 'stat/sta', 'excl_sitename' => TRUE}
+   };
 } else {
    die MSG_UNKNOWN_CONTROLLER_VERSION, $globalConfig->{'version'};
 }
 
-print "\n[#]   Global config data:\n\t", Dumper $globalConfig if ($globalConfig->{'debug'} >= DEBUG_MID);
+die "[!] Unknown object '$globalConfig->{'object'}' given. Stop " unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'object'}}); 
 
 # First - check for object type. ...but its always defined in 'my $globalConfig {' section
-if ($globalConfig->{'object'}) {
+#if ($globalConfig->{'object'}) {
    # load JSON data
-   fetchData($globalConfig, \@objJSON);
    # Ok. Type is defined. How about key?
    if ($globalConfig->{'key'}) {
        # Key is given - need to get metric. 
        # if $globalConfig->{'id'} is exist then metric of this object has returned. 
        # If not - calculate $globalConfig->{'action'} for all items in objects list (all object of type = 'object name', for example - all 'uap'
+       fetchData($globalConfig, $globalConfig->{'object'}, \@objJSON);
        $res=getMetric($globalConfig, \@objJSON, $globalConfig->{'key'});
    } else { 
        # Key is null - going generate LLD-like JSON from loaded data
-       $res=lldJSONGenerate($globalConfig, \@objJSON);
+       $res=makeLLD($globalConfig);
    }
-}
+#}
+
+# Logout need if logging in before (in fetchData() sub) completed
+print "\n[*] Logout from UniFi controller" if  ($globalConfig->{'debug'} >= DEBUG_LOW);
+$globalConfig->{'ua'}->get($globalConfig->{'logout_path'}) if ($globalConfig->{'logged_in'});
 
 # Value could be 'null'. If need to replace null to other char - {'null_char'} must be defined
 $res = $res ? $res : $globalConfig->{'null_char'} if (defined($globalConfig->{'null_char'}));
@@ -214,7 +267,7 @@ sub getMetric {
     # dive to...
     $_[0]->{'dive_level'}++;
 
-    print "\n[>] ($_[0]->{'dive_level'}) getMetric started" if ($_[0]->{'debug'} >= DEBUG_LOW);
+    print "\n[>] ($_[0]->{'dive_level'}) getMetric() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
     my $result;
     my $key=$_[2];
 
@@ -328,7 +381,7 @@ sub getMetric {
         }
    } # if (ref($_[1]) eq 'ARRAY') ... else ...
 
-  print "\n[>] ($_[0]->{'dive_level'}]) getMetric finished (" if ($_[0]->{'debug'} >= DEBUG_LOW);
+  print "\n[>] ($_[0]->{'dive_level'}) getMetric() finished (" if ($_[0]->{'debug'} >= DEBUG_LOW);
   print $result if ($_[0]->{'debug'} >= DEBUG_LOW && defined($result));
   print ") /$_[0]->{'max_depth'}/ " if ($_[0]->{'debug'} >= DEBUG_LOW);
 
@@ -344,8 +397,8 @@ sub getMetric {
 #
 #####################################################################################################################################
 sub matchObject {
-   # $_[0] - tested object
-   # $_[1] - filter data array
+   # $_[0] - Tested object
+   # $_[1] - Filter data array
    # Init match counter
    my $matchCount=0;
    my $result=TRUE;
@@ -361,8 +414,6 @@ sub matchObject {
    }
    return $result;
 }
-
-
 
 #####################################################################################################################################
 #
@@ -386,13 +437,13 @@ sub convert_if_bool {
 #####################################################################################################################################
 sub fetchData {
    # $_[0] - $GlobalConfig
-   # $_[1] - jsonData global object
-   print "\n[+] fetchData started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   print "\n[#]   options:  object='$_[0]->{'object'}'," if ($_[0]->{'debug'} >= DEBUG_MID);
+   # $_[1] - object name
+   # $_[2] - jsonData object ref
+   print "\n[+] fetchData() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
+   print "\n[#]  options:  object='$_[0]->{'object'}'," if ($_[0]->{'debug'} >= DEBUG_MID);
    print " id='$_[0]->{'id'}'," if ($_[0]->{'debug'} >= DEBUG_MID && $_[0]->{'id'});
    print " mac='$_[0]->{'mac'}'," if ($_[0]->{'debug'} >= DEBUG_MID && $_[0]->{'mac'});
    my $cacheExpire=FALSE;
-   my $checkObjType=TRUE;
    my $needReadCache=TRUE;
    my $fh;
    my $jsonData;
@@ -401,40 +452,28 @@ sub fetchData {
    my $tmpCacheFileName;
    my $objID;
    my $objPath;
+   my $objType;
+   my $givenObjType=$_[1];
 
-   my $objectName=$_[0]->{'object'};
-
-   # forming URI for objects store
-   if ($objectName eq OBJ_WLAN) {
-      $objPath="$_[0]->{'api_path'}/list/wlanconf"; 
-      $checkObjType=FALSE; 
-   } elsif ($objectName eq OBJ_USER) {
-      $objPath="$_[0]->{'api_path'}/stat/sta"; 
-      $checkObjType=FALSE; 
-   } elsif ($objectName eq OBJ_UAP || $objectName eq OBJ_USW || $objectName eq OBJ_USG || $objectName eq OBJ_UPH) { 
-     $objPath="$_[0]->{'api_path'}/stat/device"; 
-   } else { 
-      die "[!] Unknown object given"; 
-   }
-
-   # if MAC is given with comman-line option -  RapidWay for Controller v4 is allowed
-   $objPath.="/$_[0]->{'mac'}" if (($_[0]->{'version'} eq CONTROLLER_VERSION_4) && ($objectName eq OBJ_UAP) && $_[0]->{'mac'});
-   print "\n[.] Object path: $objPath\n" if ($_[0]->{'debug'} >= DEBUG_MID);
-
+   $objPath  = $_[0]->{'api_path'} . ($_[0]->{'fetch_rules'}->{$_[1]}->{'excl_sitename'} ? '' : "/s/$_[0]->{'sitename'}") . "/$_[0]->{'fetch_rules'}->{$_[1]}->{'path'}";
+   # if MAC is given with command-line option -  RapidWay for Controller v4 is allowed
+   $objPath.="/$_[0]->{'mac'}" if (($_[0]->{'version'} eq CONTROLLER_VERSION_4) && ($givenObjType eq OBJ_UAP) && $_[0]->{'mac'});
+   print "\n[.]   Object path: '$objPath'\n" if ($_[0]->{'debug'} >= DEBUG_MID);
 
    ################################################## Take JSON  ##################################################
 
    # If cache timeout setted to 0 then no try to read/update cache - fetch data from controller
    if (0 == $_[0]->{'cache_timeout'}) {
-      print "\n[.] No read/update cache because cache timeout = 0" if ($_[0]->{'debug'} >= DEBUG_MID);
-      $jsonData=fetchDataFromController($_[0],$objPath);
+      print "\n[.]   No read/update cache because cache timeout = 0" if ($_[0]->{'debug'} >= DEBUG_MID);
+#      fetchDataFromController($_[0], $givenObjType, $jsonData);
+      fetchDataFromController($_[0], $objPath, $jsonData);
    } else {
       # Change all [:/.] to _ to make correct filename
       ($cacheFileName = $objPath) =~ tr/\/\:\./_/;
       $cacheFileName = $_[0]->{'cache_root'} .'/'. $cacheFileName;
       # Cache filename point to dir? If so - die to avoid problem with read or link/unlink operations
       die "[!] Can't handle '$tmpCacheFileName' through its dir" if (-d $cacheFileName);
-      print "\n[.] Cache file name: $cacheFileName\n" if ($_[0]->{'debug'} >= DEBUG_MID);
+      print "\n[.]   Cache file name: '$cacheFileName'\n" if ($_[0]->{'debug'} >= DEBUG_MID);
       # Cache file is exist and non-zero size?
       if (-e $cacheFileName && -s $cacheFileName) { 
          # Yes, is exist.
@@ -448,11 +487,11 @@ sub fetchData {
 
       if ($cacheExpire) {
       # Cache expire - need to update
-         print "\n[.] Cache expire or not found. Renew..." if ($_[0]->{'debug'} >= DEBUG_MID);
+         print "\n[.]   Cache expire or not found. Renew..." if ($_[0]->{'debug'} >= DEBUG_MID);
          $tmpCacheFileName=$cacheFileName . ".tmp";
          # Temporary cache filename point to dir? If so - die to avoid problem with write or link/unlink operations
          die "[!] Can't handle '$tmpCacheFileName' through its dir" if (-d $tmpCacheFileName);
-         print "\n[.]   temporary cache file='$tmpCacheFileName'" if ($_[0]->{'debug'} >= DEBUG_MID);
+         print "\n[.]   Temporary cache file='$tmpCacheFileName'" if ($_[0]->{'debug'} >= DEBUG_MID);
          open ($fh, ">", $tmpCacheFileName);# or die "Could open not $tmpCacheFileName to write";
          # try to lock temporary cache file and no wait for locking.
          # LOCK_EX | LOCK_NB
@@ -461,7 +500,8 @@ sub fetchData {
             chmod 0666, $fh;
 
             # ...fetch new data from controller...
-            $jsonData=fetchDataFromController($_[0], $objPath);
+#            fetchDataFromController($_[0], $givenObjType, $jsonData);
+            fetchDataFromController($_[0], $objPath, $jsonData);
             # unbuffered write it to temp file..
             syswrite ($fh, JSON::encode_json($jsonData));
             # Now unlink old cache filedata from cache filename 
@@ -495,14 +535,19 @@ sub fetchData {
 
 ################################################## JSON processing ##################################################
   $jsonLen=@{$jsonData};
+  #print "\n ***************** \n";
+  #print Dumper $jsonData;
+ # print $jsonLen;
   # Take each object
   for (my $nCnt=0; $nCnt < $jsonLen; $nCnt++) {
      # Test object type or pass if 'obj-have-no-type' (workaround for WLAN, for example)
-     next if ($checkObjType && (@{$jsonData}[$nCnt]->{type} ne $_[0]->{'object'}));
+     $objType=@{$jsonData}[$nCnt]->{'type'};
+     next if ($objType && ($objType ne $givenObjType));
+#     next if (defined($jsonData[$nCnt]->{'type'}) && (@{$jsonData}[$nCnt]->{'type'} ne $_[0]->{'object'}));
      # ID is given by command-line?
      unless ($_[0]->{'id'}) {
        # No ID given. Push all object which have correct type
-       push (@{$_[1]}, @{$jsonData}[$nCnt]);
+       push (@{$_[2]}, @{$jsonData}[$nCnt]);
        # and skip next steps
        next;
      }
@@ -511,21 +556,21 @@ sub fetchData {
 
      # Taking from json-key object's ID
      # UBNT Phones store ID into 'device_id' key (?)
-     if ($objectName eq OBJ_UPH) {
-        $objID=@{$jsonData}[$nCnt]->{device_id}; 
+     if ($givenObjType eq OBJ_UPH) {
+        $objID=@{$jsonData}[$nCnt]->{'device_id'}; 
      } else { 
-        $objID=@{$jsonData}[$nCnt]->{_id}; 
+        $objID=@{$jsonData}[$nCnt]->{'_id'}; 
      }
 
      # It is required object?
      if ($objID eq $_[0]->{'id'}) { 
         # Yes. Push object to global @objJSON and jump out from the loop
-        push (@{$_[1]}, @{$jsonData}[$nCnt]); last;
+        push (@{$_[2]}, @{$jsonData}[$nCnt]); last;
      }
    } # foreach jsonData
 
-   print "\n[<]   fetched data:\n\t", Dumper $_[1] if ($_[0]->{'debug'} >= DEBUG_HIGH);
-   print "\n[-] fetchDataFromController finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
+   print "\n[<]   Fetched data:\n\t", Dumper $_[2] if ($_[0]->{'debug'} >= DEBUG_HIGH);
+   print "\n[-] fetchData() finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
    return TRUE;
 }
 
@@ -536,158 +581,213 @@ sub fetchData {
 #####################################################################################################################################
 sub fetchDataFromController {
    # $_[0] - GlobalConfig
-   # $_[11 - object path
+   # $_[1] - object name
+   # $_[2] - jsonData object ref
    #
-   print "\n[+] fetchDataFromController started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   print "\n[*] Login into UniFi controller" if ($_[0]->{'debug'} >= DEBUG_LOW);
+   my $response;
+   my $result;
+   my $objPath;
+   
+   $objPath  = $_[1]; # $_[0]->{'api_path'} . ($_[0]->{'fetch_rules'}->{$_[1]}->{'excl_sitename'} ? '' : "/s/$_[0]->{'sitename'}") . "/$_[0]->{'fetch_rules'}->{$_[1]}->{'path'}";
+
+   my $fetchType=$_[0]->{'fetch_rules'}->{$_[0]->{'object'}}->{'method'};
+   my $fetchCmd=$_[0]->{'fetch_rules'}->{$_[0]->{'object'}}->{'cmd'};
+
+   print "\n[+] fetchDataFromController() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
+   print "\n[#]   options: object='$_[1]'" if ($_[0]->{'debug'} >= DEBUG_MID);
+
    # HTTP UserAgent init
    # Set SSL_verify_mode=off to login without certificate manipulation
    # SSL_verify_mode => 0 eq SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE ?
-   my $ua = LWP::UserAgent-> new(cookie_jar => {}, agent => "UniFi Miner/" . MINER_VERSION . " (perl engine)",
+   unless ($_[0]->{'ua'}) {
+       $_[0]->{'ua'} = LWP::UserAgent-> new(cookie_jar => {}, agent => "UniFi Miner/" . MINER_VERSION . " (perl engine)",
                                  ssl_opts => {SSL_verify_mode => 0, verify_hostname => 0});
-   unifiLogin($_[0], $ua);
+      }
 
-   my $result=getJSON($_[0], $ua, $_[1]);
-   #print "\n[<]   recieved from JSON requestor:\n\t $result" if $_[0]->{'debug'} >= DEBUG_HIGH;
+   ################################################## Logging in  ##################################################
+   # how to check 'still logged' state?
+   unless ($_[0]->{'logged_in'}) {
+     print "\n[.] Try to log in into controller" if ($_[0]->{'debug'} >= DEBUG_LOW);
+     $response=$_[0]->{'ua'}->post($_[0]->{'login_path'}, 'Content_type' => "application/$_[0]->{'login_type'}", 'Content' => $_[0]->{'login_data'});
+     print "\n[<]  HTTP respose:\n\t", Dumper $response if ($_[0]->{'debug'} >= DEBUG_HIGH);
 
-   print "\n[*] Logout from UniFi controller" if  ($_[0]->{'debug'} >= DEBUG_LOW);
-   unifiLogout($_[0], $ua);
-   print "\n[-] fetchDataFromController finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
+     if ($_[0]->{'version'} eq CONTROLLER_VERSION_4) {
+        # v4 return 'Bad request' (code 400) on wrong auth
+        die "\n[!] Login error: " if ($response->code eq '400');
+        # v4 return 'OK' (code 200) on success login and must die only if get error
+        die "\n[!] Other HTTP error: ", $response->code if ($response->is_error);
+     } elsif ($_[0]->{'version'} eq CONTROLLER_VERSION_3) {
+        # v3 return 'OK' (code 200) on wrong auth
+        die "\n[!] Login error: ", $response->code if ($response->is_success );
+        # v3 return 'Redirect' (code 302) on success login and must die only if code<>302
+        die "\n[!] Other HTTP error: ", $response->code if ($response->code ne '302');
+     } else {
+        # v2 code
+        ;
+       }
+     print "\n[-] log in finished successfully" if ($_[0]->{'debug'} >= DEBUG_LOW);
+     $_[0]->{'logged_in'} = TRUE; 
+  }
+
+
+   ################################################## Fetch data from controller  ##################################################
+
+   print "\n[.]  objPath=$objPath" if ($_[0]->{'debug'} >= DEBUG_LOW);
+   if (BY_CMD == $fetchType) {
+      print "\n[.]  fetch data with CMD method: '$fetchCmd'" if ($_[0]->{'debug'} >= DEBUG_MID);
+      $response=$_[0]->{'ua'}->post($objPath, 'Content_type' => 'application/json', 'Content' => $fetchCmd);
+
+   } elsif (BY_GET == $fetchType) {
+      print "\n[.]  fetch data with GET method" if ($_[0]->{'debug'} >= DEBUG_MID);
+      $response=$_[0]->{'ua'}->get($objPath);
+
+   }
+
+   die "\n[!] JSON taking error, HTTP code:", $response->status_line unless ($response->is_success);
+   print "\n[<]   Fetched data:\n\t", Dumper $response->decoded_content if ($_[0]->{'debug'} >= DEBUG_HIGH);
+   $result=JSON::decode_json($response->decoded_content);
+   my $jsonMeta=$result->{'meta'}->{'rc'};
+   # server answer is ok ?
+   die "[!] getJSON error: rc=$jsonMeta" if ($jsonMeta ne 'ok'); 
+   $_[2]=$result->{'data'};
+   print "\n[<]   decoded data:\n\t", Dumper $_[2] if ($_[0]->{'debug'} >= DEBUG_HIGH);
+
+   print "\n[-] fetchDataFromController() finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
    $_[0]->{'downloaded'}=TRUE;
-   return $result;
+
+   return TRUE;
 }
+
 
 #####################################################################################################################################
 #
 #  Generate LLD-like JSON using fetched data
 #
 #####################################################################################################################################
-sub lldJSONGenerate{
-    # $_[0] - $GlobalConfig
-    # $_[1] - array/hash with info
-    print "\n[+] lldJSONGenerate started" if ($_[0]->{'debug'} >= DEBUG_LOW);
+sub makeLLD {
+    # $_[0] - $globalConfig
+    print "\n[+] makeLLD() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
     print "\n[#]   options: object='$_[0]->{'object'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
+    my $givenSiteName;
+    my $jsonObj;
     my $lldResponse;
+    my $lldPiece;
     my $result;
-    my $objectName=$_[0]->{'object'};
-    my $jsonLen=@{$_[1]};
-    # if $_[1] is array...
-    if ($jsonLen) {
-       # temporary workaround for handle USW ports 
-       if ($_[0]->{'id'}) {
-          my $lldItem=0;
-          if ($objectName eq OBJ_USW) {
-             print "usw_ports";
-             foreach my $jsonObject (@{$_[1][0]->{'port_table'}}) {
-               $result->[$lldItem]->{'{#ALIAS}'}=$jsonObject->{'name'};
-               $result->[$lldItem]->{'{#PORTIDX}'}="$jsonObject->{'port_idx'}";
-               $lldItem++;
-             }
-           }
-        # end of workaround
-        } else {
-          for (my $i=0; $i < $jsonLen; $i++) {
-            if ($objectName eq OBJ_WLAN) {
-               $result->[$i]={'{#ALIAS}' => $_[1][$i]->{'name'}};
-               $result->[$i]->{'{#ID}'}=$_[1][$i]->{'_id'};
-#               $result->[$i]->{'{#ISGUEST}'}=convert_if_bool($_[1][$i]->{'is_guest'});
-#               $result->[$i]->{'{#ISGUEST}'}=$_[1][$i]->{'is_guest'};
-           } elsif ($objectName eq OBJ_USER ) {
-              $result->[$i]->{'{#NAME}'}=$_[1][$i]->{'hostname'};
-              $result->[$i]->{'{#ID}'}=$_[1][$i]->{'_id'};
-              $result->[$i]->{'{#IP}'}=$_[1][$i]->{'ip'};
-              $result->[$i]->{'{#MAC}'}=$_[1][$i]->{'mac'};
-              # sometime {hostname} may be null. UniFi controller replace that hostnames by {'mac'}
-              $result->[$i]->{'{#NAME}'}=$result->[$i]->{'{#MAC}'} unless defined ($result->[$i]->{'{#NAME}'});
-           } elsif ($objectName eq OBJ_UPH ) {
-              $result->[$i]->{'{#ID}'}=$_[1][$i]->{'device_id'};
-              $result->[$i]->{'{#IP}'}=$_[1][$i]->{'ip'};
-              $result->[$i]->{'{#MAC}'}=$_[1][$i]->{'mac'};
-              # state of object: 0 - off, 1 - on
-              $result->[$i]->{'{#STATE}'}=$_[1][$i]->{'state'};
-           } elsif ($objectName eq OBJ_UAP || $objectName eq OBJ_USG || $objectName eq OBJ_USW) {
-              $result->[$i]->{'{#ALIAS}'}=$_[1][$i]->{'name'};
-              $result->[$i]->{'{#ID}'}=$_[1][$i]->{'_id'};
-              $result->[$i]->{'{#IP}'}=$_[1][$i]->{'ip'};
-              $result->[$i]->{'{#MAC}'}=$_[1][$i]->{'mac'};
-              # state of object: 0 - off, 1 - on
-              $result->[$i]->{'{#STATE}'}=$_[1][$i]->{'state'};
-           }
-         } #foreach;
-      }
-    }
+    my $siteList=();
+    my $siteObj;
+    my $objList;
+    my $givenObjType=$_[0]->{'object'};
 
-    $lldResponse->{'data'}=$result;
-    $result=JSON::encode_json($lldResponse);
-    print "\n[<]   generated lld:\n\t", Dumper $result if ($_[0]->{'debug'} >= DEBUG_HIGH);
-    print "\n[-] lldJSONGenerate finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
+    # Work with sites only with unused '-s' option ({'sitename_given'} = TRUE) or with controller = v3 or v4 (v2 hasn't sites)
+    if ((! $_[0]->{'sitename_given'}) && (($_[0]->{'version'} eq CONTROLLER_VERSION_4) || ($_[0]->{'version'} eq CONTROLLER_VERSION_3))) {
+       # Get site list
+       fetchData($_[0], OBJ_SITE, $siteList);
+       print "\n[.]   Sites list:\n\t", Dumper $siteList if ($_[0]->{'debug'} >= DEBUG_MID);
+       # User ask LLD for 'site' object - make LLD piece with site list.
+       if ($givenObjType eq OBJ_SITE) {
+          addToLLD($_[0], undef, $siteList, $lldPiece) if ($siteList);
+       } else {
+       # User want to get LLD with objects for all or one sites
+          foreach $siteObj (@{$siteList}) {
+             # skip hidden site 'super'
+             next if (convert_if_bool($siteObj->{'attr_hidden'}));
+             print "\n[.]   Handle site: '$siteObj->{'name'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
+             # change {'sitename'} in $globalConfig. fetchData() use that config for forming path and get right info from cache/controller 
+             $_[0]->{'sitename'}=$siteObj->{'name'};
+             # Not nulled list causes duplicate LLD items
+             $objList=();
+             # Take objects from foreach'ed site
+             fetchData($_[0], $givenObjType, $objList);
+             # Add its info to LLD-response 
+             print "\n[.]   Objects list:\n\t", Dumper $objList if ($_[0]->{'debug'} >= DEBUG_MID);
+             addToLLD($_[0], $siteObj, $objList, $lldPiece) if ($objList);
+          } 
+       } 
+    } else {
+      # 'no sites walking' routine code here
+      print "\n[.]   'no sites walking' routine activated";#, if ($_[0]->{'debug'} >= DEBUG_MID);
+      # Take objects
+      fetchData($_[0], $givenObjType, $objList);
+      print "\n[.]   Objects list:\n\t";#, Dumper $objList if ($_[0]->{'debug'} >= DEBUG_MID);
+      # Add info to LLD-response 
+      addToLLD($_[0], undef, $objList, $lldPiece) if ($objList);
+    }
+    
+    # link LLD to {'data'} key
+    $result->{'data'} = $lldPiece;
+    # make JSON
+    $result=JSON::encode_json($result);
+    print "\n[<]   generated LLD:\n\t", Dumper $result if ($_[0]->{'debug'} >= DEBUG_HIGH);
+    print "\n[-] makeLLD() finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
     return $result;
 }
 
 #####################################################################################################################################
 #
-#  Authenticate against unifi controller
+#  Add a piece to exists LLD-like JSON 
 #
 #####################################################################################################################################
-sub unifiLogin {
-   # $_[0] - GlobalConfig
-   # $_[1] - user agent
-   print "\n[>] unifiLogin started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   print "\n[#]  options path='$_[0]->{'login_path'}' type='$_[0]->{'login_type'}' data='$_[0]->{'login_data'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
-   my $response=$_[1]->post($_[0]->{'login_path'}, 'Content_type' => "application/$_[0]->{'login_type'}", 'Content' => $_[0]->{'login_data'});
-   print "\n[<]  HTTP respose:\n\t", Dumper $response if ($_[0]->{'debug'} >= DEBUG_HIGH);
+sub addToLLD {
+    # $_[0] - $globalConfig
+    # $_[1] - Site object
+    # $_[2] - Incoming objects list
+    # $_[3] - Outgoing objects list
+    my $jsonObj;
+    my $givenObjType=$_[0]->{'object'};
+    my $result;
+    print "\n[+] addToLLD() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
 
-   if ($_[0]->{'version'} eq CONTROLLER_VERSION_4) {
-      # v4 return 'Bad request' (code 400) on wrong auth
-      die "\n[!] Login error:" if ($response->code eq '400');
-      # v4 return 'OK' (code 200) on success login and must die only if get error
-      die "\n[!] Other HTTP error:", $response->code if ($response->is_error);
-   } elsif ($_[0]->{'version'} eq CONTROLLER_VERSION_3) {
-      # v3 return 'OK' (code 200) on wrong auth
-      die "\n[!] Login error:", $response->code if ($response->is_success );
-      # v3 return 'Redirect' (code 302) on success login and must die only if code<>302
-      die "\n[!] Other HTTP error:", $response->code if ($response->code ne '302');
-   } else {
-      # v2 code
-      ;
-       }
-   print "\n[-] unifiLogin finished successfully" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   return  $response->code;
-}
+#    my $workList;
+#    my $wlanHash;
+#    if ($objectName eq OBJ_USER) {
+#         print "\n[p1]\n";
+#         fetchData($_[0], OBJ_WLAN, $workList);
+#         foreach my $wlanObj (@{$workList}) {
+#           $wlanHash->{$wlanObj->{'_id'}} = $wlanObj->{'name'};
+#         } 
+#         print Dumper  $wlanHash;
+#    }
 
-#####################################################################################################################################
-#
-#  Close session 
-#
-#####################################################################################################################################
-sub unifiLogout {
-   # $_[0] - GlobalConfig
-   # $_[1] - user agent
-   print "\n[+] unifiLogout started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   my $response=$_[1]->get($_[0]->{'logout_path'});
-   print "\n[-] unifiLogout finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
-}
+    foreach $jsonObj (@{$_[2]}) {
+      $result=();
+      $result->{'{#NAME}'}     = $jsonObj->{'name'};
+      $result->{'{#ID}'}       = $jsonObj->{'_id'};
+      # $_[1] is undefined if script uses with v2 controller or generate LLD for OBJ_SITE  
+      $result->{'{#SITENAME}'} = $_[1]->{'name'} if ($_[1]);
+      $result->{'{#SITEID}'}   = $_[1]->{'_id'} if ($_[1]);
+      if ($givenObjType eq OBJ_WLAN) {
+         # is_guest key could be not exist with 'user' network on v3 
+         $result->{'{#ISGUEST}'}=convert_if_bool($jsonObj->{'is_guest'}) if (exists($jsonObj->{'is_guest'}));
+      } elsif ($givenObjType eq OBJ_USER ) {
+         $result->{'{#NAME}'}   = $jsonObj->{'hostname'};
+         $result->{'{#IP}'}     = $jsonObj->{'ip'};
+         $result->{'{#MAC}'}    = $jsonObj->{'mac'};
+#         $result->{'{#WLANID}'} = $jsonObj->{'wlan'};
+#         $result->{'{#WLANNAME}'} = $wlanHash->{$jsonObj->{'wlan'}};
+         # sometime {hostname} may be null. UniFi controller replace that hostnames by {'mac'}
+         $result->{'{#NAME}'}   = $result->{'{#MAC}'} unless defined ($result->{'{#NAME}'});
+      } elsif ($givenObjType eq OBJ_UPH ) {
+         $result->{'{#ID}'}     = $jsonObj->{'device_id'};
+         $result->{'{#IP}'}     = $jsonObj->{'ip'};
+         $result->{'{#MAC}'}    = $jsonObj->{'mac'};
+         # state of object: 0 - off, 1 - on
+         $result->{'{#STATE}'}  = $jsonObj->{'state'};
+      } elsif ($givenObjType eq OBJ_SITE) {
+         next if (convert_if_bool($jsonObj->{'attr_hidden'}));
+         $result->{'{#DESC}'}     = $jsonObj->{'desc'};
+      } elsif ($givenObjType eq OBJ_UAP) {
+         $result->{'{#IP}'}     = $jsonObj->{'ip'};
+         $result->{'{#MAC}'}    = $jsonObj->{'mac'};
+         $result->{'{#STATE}'}  = $jsonObj->{'state'};
+      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
+         $result->{'{#IP}'}     = $jsonObj->{'ip'};
+         $result->{'{#MAC}'}    = $jsonObj->{'mac'};
+         # state of object: 0 - off, 1 - on
+         $result->{'{#STATE}'}  = $jsonObj->{'state'};
+      }
+      push(@{$_[3]}, $result);
+    }
 
-#####################################################################################################################################
-#
-#  Take JSON from controller via HTTP  
-#
-#####################################################################################################################################
-sub getJSON {
-   # $_[0] - GlobalConfig
-   # $_[1] - user agent
-   # $_[2] - uri string
-   print "\n[+] getJSON started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   print "\n[#]   options url=$_[1]" if ($_[0]->{'debug'} >= DEBUG_MID);
-   my $response=$_[1]->get($_[2]);
-   # if request is not success - die
-   die "[!] JSON taking error, HTTP code:", $response->status_line unless ($response->is_success);
-   print "\n[<]   fetched data:\n\t", Dumper $response->decoded_content if ($_[0]->{'debug'} >= DEBUG_HIGH);
-   my $result=JSON::decode_json($response->decoded_content);
-   my $jsonData=$result->{'data'};
-   my $jsonMeta=$result->{'meta'};
-   # server answer is ok ?
-   die "[!] getJSON error: rc=$jsonMeta->{'rc'}" if ($jsonMeta->{'rc'} ne 'ok');
-   print "\n[-] getJSON finished successfully" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   return $jsonData;    
+    print "\n[<]   Generated LLD piece:\n\t", Dumper $result if ($_[0]->{'debug'} >= DEBUG_HIGH);
+    print "\n[-] addToLLD() finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
 }
