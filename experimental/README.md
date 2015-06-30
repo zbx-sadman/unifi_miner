@@ -9,11 +9,11 @@
 
 #### Notes
 
-**At first** - macro **_{#ALIAS}_** changed to **_{#NAME}_**. Thus, as at begin Miner's work objects was UAP's only, the names were designated as _Alias_ (as they called in the web-interface). Now the list of objects is much wider and use of the macro {#ALIAS} is wrong in fact. You need to make corrections to the template.
+**At first** - macro **_{#ALIAS}_** changed to **_{#NAME}_**. Thus, as at begin Miner's work objects was UAP's only, the names were designated as _Alias_ (as they called in the web-interface). Now the list of objects is much wider and use of the macro _{#ALIAS}_ is wrong in fact. You need to make corrections to the template.
 
-Starting with this release Miner supports 'all sites' feature with LLD routines. This feature activated when '-s' option not used. Resulting LLD can be filtered by {#SITENAME} or "{#SITEID}" macro.
+Starting with this release Miner supports 'all sites' feature with LLD routines. This feature activated when '-s' option not used. Resulting LLD can be filtered by _{#SITENAME}_ or _{#SITEID}_ macro.
 
-You can get "Other HTTP error: 500" while connect to UniFi controller. And when you try to connect again using '-d 3' option to get more debug info, you can may reach 'SSL23_GET_SERVER_HELLO' error in HTTP reply. Fix is as follows: open _unifi_miner.pl_ for edit, find remark with _SSL23_GET_SERVER_HELLO_ word and uncomment two next lines: 
+You can get 'Other HTTP error: 500' while connect to UniFi controller. And when you try to connect again using '-d 3' option to get more debug info, you can may reach 'SSL23_GET_SERVER_HELLO' error in HTTP reply. Fix is as follows: open _unifi_miner.pl_ for edit, find remark with _SSL23_GET_SERVER_HELLO_ word and uncomment two next lines: 
 
 ` #use IO::Socket::SSL;`
 
