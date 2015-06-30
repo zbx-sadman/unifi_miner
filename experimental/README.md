@@ -14,10 +14,10 @@
 Starting with this release Miner supports 'all sites' feature with LLD routines. This feature activated when '-s' option not used. Resulting LLD can be filtered by {#SITENAME} or "{#SITEID}" macro.
 
 You can get "Other HTTP error: 500" while connect to UniFi controller. And when you try to connect again using '-d 3' option to get more debug info, you can may reach 'SSL23_GET_SERVER_HELLO' error in HTTP reply. Fix is as follows: open _unifi_miner.pl_ for edit, find remark with _SSL23_GET_SERVER_HELLO_ word and uncomment two next lines: 
-`
-#use IO::Socket::SSL;
-#IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => Net::SSLeay::VERIFY_NONE()));
-`
+
+` #use IO::Socket::SSL;`
+
+` #IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => Net::SSLeay::VERIFY_NONE()));`
 
 ### Examples
    Getting LLD for all sites
