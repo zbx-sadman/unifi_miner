@@ -1,10 +1,48 @@
 # Experimental place
 
+### 30.06.2015
+- All sites LLD implemented;
+- Added new object 'site';
+- Big changes to generate LLD procedure (**read notes**);
+- Small changes in fetchData routines;
+- SSL23_GET_SERVER_HELLO error fixed.
+
+#### Notes
+
+At first - macro *_{#ALIAS}_* changed to *_{#NAME}_*. Thus, as at begin Miner's work objects was UAP's only, the names were designated as _Alias_
+(as they called in the web-interface). Now the list of objects is much wider and use of the macro {#ALIAS} is wrong in fact. You need to make 
+corrections to the template.
+
+Starting with this release Miner supports 'all sites' feature with LLD routines. This feature activated when '-s' option not used. Resulting LLD can be filtered by {#SITENAME} or "{#SITEID}" macro.
+
+You can get "Other HTTP error: 500" while connect to UniFi controller. And when you try to connect again using '-d 3' option to get more debug info, you 
+can may see 'SSL23_GET_SERVER_HELLO' error in HTTP reply. Fix is as follows: open _unifi_miner.pl_ for edit, find remark with _SSL23_GET_SERVER_HELLO_ word
+and uncomment two next lines: 
+<
+#use IO::Socket::SSL;
+#IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => Net::SSLeay::VERIFY_NONE()));
+>
+
+### Examples
+   Getting LLD for all sites
+
+  `./unifi_miner.pl -o site`
+
+   Getting LLD for UAPs on all sites
+
+  `./unifi_miner.pl -o uap`
+
+   Getting LLD for WLANs on site 'siteone'
+
+  `./unifi_miner.pl -o wlan -s siteone`
+
+
+
 ### 25.06.2015
 - Rewritten getMetric procedure;
 - Rewritten JSON load code;
 - Rewritten cache renew procedure to reduce runtime and avoid race condition;
-- Added subroutine for store statistic info into file;
+- Added subroutine for store statistic info into file.
 
 #### Notes
 
