@@ -19,7 +19,7 @@ You can get 'Other HTTP error: 500' while connect to UniFi controller. And when 
 
 ` #IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => Net::SSLeay::VERIFY_NONE()));`
 
-### Examples
+#### Examples
    Getting LLD for all sites
 
   `./unifi_miner.pl -o site`
@@ -85,7 +85,7 @@ I recommend mandatory use `-a` option with calling UniFi Miner - i thought to tr
 
   In some cases Miner was returned `true`/`false` for boolean JSON-keys, but Zabbix take only `1`/`0` for boolean. It assumedly fixed. 
 
-### Examples
+#### Examples
    Getting LLD for all clients
 
   `./unifi_miner.pl -o user`
