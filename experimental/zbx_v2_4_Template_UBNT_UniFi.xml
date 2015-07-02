@@ -85,7 +85,7 @@ a lot of beer</description>
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.site.state[{#NAME},site,_id, get]</key>
+                            <key>unifi.site.state[{#NAME},site,_id,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -977,7 +977,7 @@ a lot of beer</description>
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},num_sta, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},num_sta,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1020,7 +1020,7 @@ a lot of beer</description>
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state.mac[{#SITENAME},uap,{#MAC}, num_sta, get]</key>
+                            <key>unifi.state.mac[{#SITENAME},uap,{#MAC},num_sta,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1063,7 +1063,7 @@ a lot of beer</description>
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},version, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},version,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -1106,7 +1106,7 @@ a lot of beer</description>
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},guest-num_sta, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},guest-num_sta,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1280,7 +1280,7 @@ a lot of beer</description>
                             <snmp_community/>
                             <multiplier>1</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},rx_bytes, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},rx_bytes,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1323,7 +1323,7 @@ a lot of beer</description>
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},model, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},model,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -1369,7 +1369,7 @@ BZ2LR - UAP LR&#13;
                             <snmp_community/>
                             <multiplier>1</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},tx_bytes, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},tx_bytes,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1412,7 +1412,7 @@ BZ2LR - UAP LR&#13;
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.rx_dropped, sum]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.rx_dropped,sum]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1459,7 +1459,7 @@ The bottom line is that the high RX error rate is due to Radio interferences fro
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.rx_errors, sum]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.rx_errors,sum]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1502,7 +1502,7 @@ The bottom line is that the high RX error rate is due to Radio interferences fro
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID}, serial, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},serial,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -1545,7 +1545,7 @@ The bottom line is that the high RX error rate is due to Radio interferences fro
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},stat.tx_dropped, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},stat.tx_dropped,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1590,7 +1590,7 @@ The number of packets dropped during transmission.</description>
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.tx_errors, sum]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.tx_errors,sum]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1633,7 +1633,7 @@ The number of packets dropped during transmission.</description>
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},ng_tx_retries, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},ng_tx_retries,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1678,7 +1678,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},ng_ast_txto, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},ng_ast_txto,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1721,7 +1721,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},isolated, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},isolated,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1764,7 +1764,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},adopted, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},adopted,get]</key>
                             <delay>600</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1807,7 +1807,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},state, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},state,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1850,7 +1850,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},uptime, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},uptime,get]</key>
                             <delay>60</delay>
                             <history>1</history>
                             <trends>90</trends>
@@ -1893,7 +1893,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},user-num_sta, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},user-num_sta,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1936,7 +1936,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},ng-channel, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},ng-channel,get]</key>
                             <delay>120</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -1979,7 +1979,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uap,{#ID},ng-tx_power, get]</key>
+                            <key>unifi.state[{#SITENAME},uap,{#ID},ng-tx_power,get]</key>
                             <delay>120</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -2019,7 +2019,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                     </item_prototypes>
                     <trigger_prototypes>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},version, get].str(&quot;{$FW_UAP_LATEST_VER}&quot;)}=0</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},version,get].str(&quot;{$FW_UAP_LATEST_VER}&quot;)}=0</expression>
                             <name>[{#SITENAME}] Firmware on UAP &quot;{#NAME}&quot; is not {$FW_UAP_LATEST_VER}</name>
                             <url/>
                             <status>0</status>
@@ -2028,7 +2028,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},version, get].change()}=1</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},version,get].change()}=1</expression>
                             <name>[{#SITENAME}] Firmware version on UAP &quot;{#NAME}&quot; is changed</name>
                             <url/>
                             <status>0</status>
@@ -2037,7 +2037,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},isolated, get].min(1m)}=1</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},isolated,get].min(1m)}=1</expression>
                             <name>[{#SITENAME}] UAP &quot;{#NAME}&quot; is isolated &gt; 1 min</name>
                             <url/>
                             <status>0</status>
@@ -2046,7 +2046,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},state, get].max(1m)}=0</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},state,get].max(1m)}=0</expression>
                             <name>[{#SITENAME}] UAP &quot;{#NAME}&quot; is not active &gt; 1 min</name>
                             <url/>
                             <status>0</status>
@@ -2055,7 +2055,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},adopted, get].max(1m)}=0</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},adopted,get].max(1m)}=0</expression>
                             <name>[{#SITENAME}] UAP &quot;{#NAME}&quot; is not adopted &gt; 1m</name>
                             <url/>
                             <status>0</status>
@@ -2073,7 +2073,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},adopted, get].max(1m)}=0</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uap,{#ID},adopted,get].max(1m)}=0</expression>
                             <name>[{#SITENAME}] USW &quot;{#NAME}&quot; is not adopted &gt; 1m</name>
                             <url/>
                             <status>0</status>
@@ -2110,7 +2110,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},uap,{#ID},user-num_sta, get]</key>
+                                        <key>unifi.state[{#SITENAME},uap,{#ID},user-num_sta,get]</key>
                                     </item>
                                 </graph_item>
                                 <graph_item>
@@ -2122,7 +2122,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},uap,{#ID},guest-num_sta, get]</key>
+                                        <key>unifi.state[{#SITENAME},uap,{#ID},guest-num_sta,get]</key>
                                     </item>
                                 </graph_item>
                             </graph_items>
@@ -2198,7 +2198,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},uap,{#ID},rx_bytes, get]</key>
+                                        <key>unifi.state[{#SITENAME},uap,{#ID},rx_bytes,get]</key>
                                     </item>
                                 </graph_item>
                                 <graph_item>
@@ -2210,7 +2210,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.tx_errors, sum]</key>
+                                        <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.tx_errors,sum]</key>
                                     </item>
                                 </graph_item>
                                 <graph_item>
@@ -2222,7 +2222,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.rx_errors, sum]</key>
+                                        <key>unifi.state[{#SITENAME},uap,{#ID},vap_table.rx_errors,sum]</key>
                                     </item>
                                 </graph_item>
                                 <graph_item>
@@ -2234,7 +2234,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},uap,{#ID},tx_bytes, get]</key>
+                                        <key>unifi.state[{#SITENAME},uap,{#ID},tx_bytes,get]</key>
                                     </item>
                                 </graph_item>
                             </graph_items>
@@ -2281,7 +2281,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uph,{#ID},state, get]</key>
+                            <key>unifi.state[{#SITENAME},uph,{#ID},state,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>365</trends>
@@ -2324,7 +2324,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uph,{#ID},version, get]</key>
+                            <key>unifi.state[{#SITENAME},uph,{#ID},version,get]</key>
                             <delay>3600</delay>
                             <history>30</history>
                             <trends>365</trends>
@@ -2367,7 +2367,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uph,{#ID},model, get]</key>
+                            <key>unifi.state[{#SITENAME},uph,{#ID},model,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2410,7 +2410,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uph,{#ID},platform_version, get]</key>
+                            <key>unifi.state[{#SITENAME},uph,{#ID},platform_version,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2453,7 +2453,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uph,{#ID},serial, get]</key>
+                            <key>unifi.state[{#SITENAME},uph,{#ID},serial,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2496,7 +2496,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uph,{#ID},adopted, get]</key>
+                            <key>unifi.state[{#SITENAME},uph,{#ID},adopted,get]</key>
                             <delay>120</delay>
                             <history>7</history>
                             <trends>365</trends>
@@ -2539,7 +2539,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},uph,{#ID},uptime, get]</key>
+                            <key>unifi.state[{#SITENAME},uph,{#ID},uptime,get]</key>
                             <delay>60</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2579,7 +2579,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                     </item_prototypes>
                     <trigger_prototypes>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uph,{#ID},version, get].change()}=1</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uph,{#ID},version,get].change()}=1</expression>
                             <name>[{#SITENAME}] Firmware version on UPH &quot;{#NAME}&quot; is changed</name>
                             <url/>
                             <status>0</status>
@@ -2588,7 +2588,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uph,{#ID},state, get].max(1m)}=0</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uph,{#ID},state,get].max(1m)}=0</expression>
                             <name>[{#SITENAME}] UPH &quot;{#NAME}&quot; is not active &gt; 1m</name>
                             <url/>
                             <status>0</status>
@@ -2597,7 +2597,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uph,{#ID},adopted, get].max(1m)}=0</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},uph,{#ID},adopted,get].max(1m)}=0</expression>
                             <name>[{#SITENAME}] UPH &quot;{#NAME}&quot; is not adopted &gt; 1m</name>
                             <url/>
                             <status>0</status>
@@ -2648,7 +2648,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},version, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},version,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2691,7 +2691,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},hostname, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},hostname,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2734,7 +2734,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>1</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},rx_bytes, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},rx_bytes,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -2777,7 +2777,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},model, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},model,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2820,7 +2820,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},networkgroup, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},networkgroup,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2863,7 +2863,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>1</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},tx_bytes, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},tx_bytes,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -2906,7 +2906,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},serial, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},serial,get]</key>
                             <delay>3600</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -2949,7 +2949,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>1</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.rx_bytes, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.rx_bytes,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -2992,7 +2992,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>1</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.tx_bytes, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.tx_bytes,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -3035,7 +3035,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},adopted, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},adopted,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>365</trends>
@@ -3078,7 +3078,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},state, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},state,get]</key>
                             <delay>60</delay>
                             <history>7</history>
                             <trends>365</trends>
@@ -3121,7 +3121,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.up, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.up,get]</key>
                             <delay>600</delay>
                             <history>7</history>
                             <trends>365</trends>
@@ -3164,7 +3164,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.ip, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.ip,get]</key>
                             <delay>600</delay>
                             <history>7</history>
                             <trends>365</trends>
@@ -3207,7 +3207,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.media, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.media,get]</key>
                             <delay>600</delay>
                             <history>7</history>
                             <trends>365</trends>
@@ -3250,7 +3250,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.port_idx, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.port_idx,get]</key>
                             <delay>600</delay>
                             <history>7</history>
                             <trends>365</trends>
@@ -3293,7 +3293,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>1</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.speed, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},uplink.speed,get]</key>
                             <delay>600</delay>
                             <history>7</history>
                             <trends>90</trends>
@@ -3336,7 +3336,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <snmp_community/>
                             <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>unifi.state[{#SITENAME},usw,{#ID},uptime, get]</key>
+                            <key>unifi.state[{#SITENAME},usw,{#ID},uptime,get]</key>
                             <delay>60</delay>
                             <history>1</history>
                             <trends>365</trends>
@@ -3376,7 +3376,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                     </item_prototypes>
                     <trigger_prototypes>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},usw,{#ID},version, get].change()}=1</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},usw,{#ID},version,get].change()}=1</expression>
                             <name>[{#SITENAME}] Firmware version on USW &quot;{#NAME}&quot; is changed</name>
                             <url/>
                             <status>0</status>
@@ -3385,7 +3385,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},usw,{#ID},state, get].max(1m)}=0</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},usw,{#ID},state,get].max(1m)}=0</expression>
                             <name>[{#SITENAME}] UPH &quot;{#NAME}&quot; is not active &gt; 1m</name>
                             <url/>
                             <status>0</status>
@@ -3394,7 +3394,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                             <type>0</type>
                         </trigger_prototype>
                         <trigger_prototype>
-                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},usw,{#ID},adopted, get].max(1m)}=0</expression>
+                            <expression>{Template_UBNT_UniFi 02072015:unifi.state[{#SITENAME},usw,{#ID},adopted,get].max(1m)}=0</expression>
                             <name>[{#SITENAME}] USW &quot;{#NAME}&quot; is not adopted &gt; 1m</name>
                             <url/>
                             <status>0</status>
@@ -3431,7 +3431,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},usw,{#ID},tx_bytes, get]</key>
+                                        <key>unifi.state[{#SITENAME},usw,{#ID},tx_bytes,get]</key>
                                     </item>
                                 </graph_item>
                                 <graph_item>
@@ -3443,7 +3443,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},usw,{#ID},rx_bytes, get]</key>
+                                        <key>unifi.state[{#SITENAME},usw,{#ID},rx_bytes,get]</key>
                                     </item>
                                 </graph_item>
                                 <graph_item>
@@ -3455,7 +3455,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},usw,{#ID},uplink.tx_bytes, get]</key>
+                                        <key>unifi.state[{#SITENAME},usw,{#ID},uplink.tx_bytes,get]</key>
                                     </item>
                                 </graph_item>
                                 <graph_item>
@@ -3467,7 +3467,7 @@ Data rate is decreased upon failure and frame is sent again. Three sequential fa
                                     <type>0</type>
                                     <item>
                                         <host>Template_UBNT_UniFi 02072015</host>
-                                        <key>unifi.state[{#SITENAME},usw,{#ID},uplink.rx_bytes, get]</key>
+                                        <key>unifi.state[{#SITENAME},usw,{#ID},uplink.rx_bytes,get]</key>
                                     </item>
                                 </graph_item>
                             </graph_items>
