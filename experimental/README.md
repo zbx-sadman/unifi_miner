@@ -1,5 +1,43 @@
 # Experimental place
 
+### 02.07.2015
+- No more JSON wrap module supported;
+- Code optimization in order to accelerate;
+- Zabbix Template reworked.
+
+#### Notes
+
+As a result of Miner profiling decided to abandon support module JSON. It brings overhead on initialization stage and processing through recalling once of installed JSON module (PP or JSON). 
+
+Code optimization may cause a problem with output `true`/`false` instead 1/0 for booleans. If u found this bug with getMetric operations (i.e. `.../unifi_miner.pl -o uap -i <some_uap_id> -k "vap_table.is_guest" -a get`) - write to me, please.
+
+Zabbix template designed for Zabbix v2.4 (pre 2.4 users can't export its without correcting <filter> tag) and tested on UniFi controller v4. 
+Template contain Discovery rules (wits Items, some Triggers and Graphs prototypes included) for:
+- All sites on controller
+- UAP's in all sites (if u want to get UAPS for one site only, u must use LLD Filter feature or use key like _unifi.discovery[uap,MySuperSite]_)
+- WLANs in site `default` (if u want to get WLANs all sites - just use key like _unifi.discovery[wlan]_)
+- UniFi Phones in all sites. I haven't any UniFi devices except UAPs and can't check the prototypes works ;)
+- UniFi Switches in all sites. Ports discovery not supported at this release.
+
+I suspect, that UAP items list for all sites can be frighteningly large. Double check the Prototypes list and disable unwanted items before linking template to host.
+
+For correct using the template and Miner, u must:
+0. Install perl modules _JSON::XS_, _LWP_, _IO::Socket::SSL_, _Data::Dumper_ if u want to see debug messages using '-d', Time::HiRes for writing runtime stat (when _write_stat => TRUE_). U can get is with `cpan Module::Name` or `aptitude install libjson-xs-perl libwww-perl libio-socket-ssl-perl libdata-dumper-simple-perl libtime-hires-perl` for Debian.
+1. Stop zabbix-agent;
+2. Add to actual _zabbix_agentd.conf_ on box, which hosted UniFi Controller contents of _unifi.conf_ or hook up its with "Include=..." option. If u use miner before and have other selfmaded keys - move its to new _unifi.conf_;
+3. Put _unifi_miner.pl_ to _/usr/local/bin/zabbix/_  or point UserParameter to another place;
+4. Replace username/password/cacheroot/cachetimeout variables inside _unifi_miner.pl_ to yours own or use corresponding command-line options (_-u_, _-p_, etc)
+5. Start zabbix-agent;
+6. Import template
+7. Check and disable unwanted items prototypes if u not brave explorer;
+8. Make and fill
+9. Link template to existing host.
+10. Wait some time and chech Latest Data. 
+11. In success try to accelerate Miner with decrease init stage by remark with hash pragmas: _use strict;_, _use warnings;_, _use Data::Dumper;_, _use Time::HiRes_
+12. Try to take more speed with PPerl.
+
+
+
 ### 30.06.2015
 - All sites LLD implemented;
 - Added new object 'site';
