@@ -13,10 +13,10 @@ Code optimization may cause a problem with output 'true'/'false' instead 1/0 for
 
 Zabbix template designed for Zabbix v2.4 (pre 2.4 users can't export its without correcting _filter_ tag) and tested on UniFi controller v4. 
 Template contain Discovery rules (with Items, some Triggers and Graphs prototypes included) for:
-- All sites on controller
-- UAP's on all sites (if u want to get UAPS for one site only, u must use LLD Filter feature or add sitename into key like that: _unifi.discovery[uap,MySuperSite]_)
-- WLANs on site 'default' (if u want to get WLANs on all sites - just use key like _unifi.discovery[wlan]_)
-- UniFi Phones on all sites. I haven't any UniFi devices except UAPs and can't check the prototypes works ;)
+- All sites on controller;
+- UAP's on all sites (if u want to get UAPS for one site only, u must use LLD Filter feature or add sitename into key like that: _unifi.discovery[uap,MySuperSite]_);
+- WLANs on site 'default' (if u want to get WLANs on all sites - just use key like _unifi.discovery[wlan]_);
+- UniFi Phones on all sites. I haven't any UniFi devices except UAPs and can't check the prototypes works ;);
 - UniFi Switches on all sites. Ports discovery not supported at this release.
 
 I suspect, that UAP items list for all sites can be frighteningly large. Double check the Prototypes list and disable unwanted items before linking template to host.
@@ -24,17 +24,17 @@ I suspect, that UAP items list for all sites can be frighteningly large. Double 
 For correct using the template and Miner, u must:
 
 1. Install perl modules _JSON::XS_, _LWP_, _IO::Socket::SSL_, _Data::Dumper_ if u want to see debug messages using '-d', Time::HiRes for writing runtime stat (when _write_stat => TRUE_). U can get is with `cpan Module::Name` or `aptitude install libjson-xs-perl libwww-perl libio-socket-ssl-perl libdata-dumper-simple-perl libtime-hires-perl` for Debian;
-3. Stop zabbix-agent;
-3. Add to actual _zabbix_agentd.conf_ on box, which hosted UniFi Controller contents of _unifi.conf_ or hook up its with "Include=..." option. If u use miner before and have other selfmaded keys - move its to new _unifi.conf_;
-4. Put _unifi_miner.pl_ to _/usr/local/bin/zabbix/_  or point UserParameter to another place;
-5. Replace username/password/cacheroot/cachetimeout variables inside _unifi_miner.pl_ to yours own or use corresponding command-line options (_-u_, _-p_, etc);
-6. Start zabbix-agent;
+3. Stop _zabbix-agent_;
+3. Add to actual _zabbix_agentd.conf_ on box, which hosted UniFi Controller contents of _unifi.conf_ or hook up its with _Include=..._ option. If u use miner before and have other selfmaded keys - move its to new _unifi.conf_;
+4. Put _unifi_miner.pl_ to _/usr/local/bin/zabbix/_  or point _UserParameter=_ to another place;
+5. Replace _username/password/cacheroot/cachetimeout_ variables inside _unifi_miner.pl_ to yours own or use corresponding command-line options (_-u_, _-p_, etc);
+6. Start _zabbix-agent_;
 7. Import template;
 8. Check and disable unwanted items prototypes if u not brave explorer;
-9. Make and fill {$FW_UAP_LATEST_VER} with the value of you consider the last for UAPs. Otherwise - disable annoying trigger ;
+9. Make and fill _{$FW_UAP_LATEST_VER}_ macro with the value of you consider the last for UAPs. Otherwise - disable annoying trigger;
 10. Link template to existing host;
 11. Wait some time and chech Latest Data; 
-12. In success try to accelerate Miner with decrease init stage by remark with hash pragmas: _use strict_ _use warnings_ _use Data::Dumper_ _use Time::HiRes_;
+12. In success try to accelerate Miner with decrease init stage by remark with hash pragmas: _use strict_, _use warnings_, _use Data::Dumper_, _use Time::HiRes_;
 13. Skip this step, if u luckless man;
 12. Try to take more speed with PPerl.
 
