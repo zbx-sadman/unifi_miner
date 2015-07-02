@@ -5,13 +5,15 @@
 #
 # 
 #
-use strict;
-use warnings;
-use Getopt::Std;
-use Data::Dumper;
-use JSON ();
+#use strict;
+#use warnings;
+#use Data::Dumper;
+#use JSON ();
+#use Types::Serialiser;
+#use Time::HiRes ('clock_gettime');
+use Getopt::Std ();
+use JSON::XS ();
 use LWP ();
-use Time::HiRes ('clock_gettime', 'CLOCK_REALTIME');
 
 # uncomment for fix 'SSL23_GET_SERVER_HELLO:unknown' error
 #use IO::Socket::SSL;
@@ -51,8 +53,6 @@ sub fetchDataFromController;
 sub makeLLD;
 sub addToLLD;
 sub getMetric;
-sub convert_if_bool;
-sub matchObject;
 sub writeStat;
 
 #########################################################################################################################################
@@ -98,7 +98,7 @@ my $globalConfig = {
    ###
    #####################################################################################################
    # HiRes time of Miner internal processing start (not include Module Init stage)
-   start_time => clock_gettime(CLOCK_REALTIME),
+   start_time => 0,
    # HiRes time of Miner internal processing stop
    stop_time => 0,
    # Level of dive (recursive call) for getMetric subroutine
@@ -117,13 +117,14 @@ my $globalConfig = {
    sitename_given => FALSE, 
   };
 
-$globalConfig->{'start_time'}=clock_gettime(CLOCK_REALTIME) if ($globalConfig->{'write_stat'});
+# clock_gettime(1)=> clock_gettime(CLOCK_MONOLITIC)
+$globalConfig->{'start_time'}=clock_gettime(1) if ($globalConfig->{'write_stat'});
 
 my @objJSON=();
 my %options;
 my $res;
 
-getopts('a:c:d:i:k:l:m:n:o:p:s:u:v:', \%options);
+Getopt::Std::getopts('a:c:d:i:k:l:m:n:o:p:s:u:v:', \%options);
 
 # Rewrite default values by command line arguments
 $globalConfig->{'action'}        = $options{a} if defined $options{a};
@@ -231,7 +232,8 @@ print  "$res\n";
 
 # Write stat to file if need
 if ($globalConfig->{'write_stat'}) {
-   $globalConfig->{'stop_time'} = clock_gettime(CLOCK_REALTIME);
+   # clock_gettime(1)=> clock_gettime(CLOCK_MONOLITIC)
+   $globalConfig->{'stop_time'} = clock_gettime(1);
    writeStat($globalConfig);
 }
 
@@ -330,6 +332,7 @@ sub getMetric {
       print "\n[.] Just one object detected." if ($_[0]->{'debug'} >= DEBUG_MID);
       my $tableName;
       my @fData=();
+      my $matchCount=0;
       ($tableName, $key) = split(/[.]/, $key, 2);
 
       # if key is not defined after split (no comma in key) that mean no table name exist in incoming key 
@@ -361,10 +364,20 @@ sub getMetric {
           }
        } # if (! defined($key)) ... else ... 
 
+       # Test current object with filter-keys 
+       if (@fData) {
+          print "\n[.] Check the object for keys matching" if ($_[0]->{'debug'} >= DEBUG_MID);
+          # run trought flter list
+          for (my $i=0; $i < @fData; $i++ ) {
+             # if key (from filter) in object is defined and its value equal to value of filter - increase counter
+             $matchCount++ if (defined($_[1]->{$fData[$i]->{'key'}}) && ($_[1]->{$fData[$i]->{'key'}} eq $fData[$i]->{val}));
+          }     
+        }
+
        # Subtable could be not exist as 'vap_table' for UAPs which is powered off.
-       # In this case $result must be undefined for properly processed on previous dive level if subroutine is called recursively
-       # Test current object with filter-keys or pass inside if no filter defined
-       if ((!@fData) || matchObject($_[1], \@fData)) {
+       # In this case $result must stay undefined for properly processed on previous dive level if subroutine is called recursively
+       # Pass inside if no filter defined (@fData == $matchCount == 0) or all keys is matched
+       if ($matchCount == @fData) {
           print "\n[.] Object is good" if ($_[0]->{'debug'} >= DEBUG_MID);
           if ($tableName && defined($_[1]->{$tableName})) {
              # if subkey was detected (tablename is given an exist) - do recursively calling getMetric func with subtable and subkey and get value from it
@@ -373,12 +386,12 @@ sub getMetric {
           } elsif (defined($_[1]->{$key})) {
              # Otherwise - just return value for given key
              print "\n[.] It's key. Take value" if ($_[0]->{'debug'} >= DEBUG_MID);
-             $result=convert_if_bool($_[1]->{$key});
+             $result=$_[1]->{$key};
              print "\n[.] value=<$result>" if ($_[0]->{'debug'} >= DEBUG_MID);
           } else {
              print "\n[.] No key or table exist :(" if ($_[0]->{'debug'} >= DEBUG_MID);
           }
-        }
+       } # if ($matchCount == @fData)
    } # if (ref($_[1]) eq 'ARRAY') ... else ...
 
   print "\n[>] ($_[0]->{'dive_level'}) getMetric() finished (" if ($_[0]->{'debug'} >= DEBUG_LOW);
@@ -389,45 +402,6 @@ sub getMetric {
   $_[0]->{'dive_level'}--;
 
   return $result;
-}
-
-#####################################################################################################################################
-#
-#  Check the JSON object for a match with the list of filters
-#
-#####################################################################################################################################
-sub matchObject {
-   # $_[0] - Tested object
-   # $_[1] - Filter data array
-   # Init match counter
-   my $matchCount=0;
-   my $result=TRUE;
-   my $objListLen=@{$_[1]};
-   if ($objListLen) {
-   # run trought flter list
-      for (my $i=0; $i < $objListLen; $i++ ) {
-          # if key (from filter) in object is defined and its value equal to value of filter - increase counter
-          $matchCount++ if (defined($_[0]->{$_[1][$i]->{'key'}}) && ($_[0]->{$_[1][$i]->{'key'}} eq $_[1][$i]->{val}));
-      }
-      # Object not matched if match counter != length of filter list - one or more filters was not be matched
-      $result=FALSE unless ($matchCount == $objListLen);
-   }
-   return $result;
-}
-
-#####################################################################################################################################
-#
-#  Return 1/0 instead true/false if variable type is bool and return untouched value, if not
-#
-#####################################################################################################################################
-sub convert_if_bool {
-   # $_[0] - tested variable
-   # if type is boolean, convert true/false || 1/0 => 1/0 with casts to a number by math operation.
-   if (JSON::is_bool($_[0])) { 
-      return $_[0]+0 
-   } else { 
-      return $_[0] 
-   }
 }
 
 #####################################################################################################################################
@@ -465,7 +439,6 @@ sub fetchData {
    # If cache timeout setted to 0 then no try to read/update cache - fetch data from controller
    if (0 == $_[0]->{'cache_timeout'}) {
       print "\n[.]   No read/update cache because cache timeout = 0" if ($_[0]->{'debug'} >= DEBUG_MID);
-#      fetchDataFromController($_[0], $givenObjType, $jsonData);
       fetchDataFromController($_[0], $objPath, $jsonData);
    } else {
       # Change all [:/.] to _ to make correct filename
@@ -500,10 +473,9 @@ sub fetchData {
             chmod 0666, $fh;
 
             # ...fetch new data from controller...
-#            fetchDataFromController($_[0], $givenObjType, $jsonData);
             fetchDataFromController($_[0], $objPath, $jsonData);
             # unbuffered write it to temp file..
-            syswrite ($fh, JSON::encode_json($jsonData));
+            syswrite ($fh, JSON::XS::encode_json($jsonData));
             # Now unlink old cache filedata from cache filename 
             # All processes, who already read data - do not stop and successfully completed reading
             unlink $cacheFileName;
@@ -527,17 +499,15 @@ sub fetchData {
        # open file
        open ($fh, "<", $cacheFileName) or die "[!] Can't open '$cacheFileName'";
        # read data from file
-       $jsonData=JSON::decode_json(<$fh>);
+       $jsonData=JSON::XS::decode_json(<$fh>);
        # close cache
        close $fh;
     }
   } # if (0 == $_[0]->{'cache_timeout'})
 
-################################################## JSON processing ##################################################
+  ################################################## JSON processing ##################################################
+
   $jsonLen=@{$jsonData};
-  #print "\n ***************** \n";
-  #print Dumper $jsonData;
- # print $jsonLen;
   # Take each object
   for (my $nCnt=0; $nCnt < $jsonLen; $nCnt++) {
      # Test object type or pass if 'obj-have-no-type' (workaround for WLAN, for example)
@@ -645,7 +615,7 @@ sub fetchDataFromController {
 
    die "\n[!] JSON taking error, HTTP code:", $response->status_line unless ($response->is_success);
    print "\n[<]   Fetched data:\n\t", Dumper $response->decoded_content if ($_[0]->{'debug'} >= DEBUG_HIGH);
-   $result=JSON::decode_json($response->decoded_content);
+   $result=JSON::XS::decode_json($response->decoded_content);
    my $jsonMeta=$result->{'meta'}->{'rc'};
    # server answer is ok ?
    die "[!] getJSON error: rc=$jsonMeta" if ($jsonMeta ne 'ok'); 
@@ -678,8 +648,7 @@ sub makeLLD {
     my $objList;
     my $givenObjType=$_[0]->{'object'};
 
-    # Work with sites only with unused '-s' option ({'sitename_given'} = TRUE) or with controller = v3 or v4 (v2 hasn't sites)
-    if ((! $_[0]->{'sitename_given'}) && (($_[0]->{'version'} eq CONTROLLER_VERSION_4) || ($_[0]->{'version'} eq CONTROLLER_VERSION_3))) {
+    if (($_[0]->{'version'} eq CONTROLLER_VERSION_4) || ($_[0]->{'version'} eq CONTROLLER_VERSION_3)) {
        # Get site list
        fetchData($_[0], OBJ_SITE, $siteList);
        print "\n[.]   Sites list:\n\t", Dumper $siteList if ($_[0]->{'debug'} >= DEBUG_MID);
@@ -688,9 +657,13 @@ sub makeLLD {
           addToLLD($_[0], undef, $siteList, $lldPiece) if ($siteList);
        } else {
        # User want to get LLD with objects for all or one sites
+          $givenSiteName=$_[0]->{'sitename'};
           foreach $siteObj (@{$siteList}) {
              # skip hidden site 'super'
-             next if (convert_if_bool($siteObj->{'attr_hidden'}));
+#             next if (convert_if_bool($siteObj->{'attr_hidden'}));
+             next if ($siteObj->{'attr_hidden'});
+             # skip site, if '-s' option used and current site other, that given
+             next if ($_[0]->{'sitename_given'} && ($givenSiteName ne $siteObj->{'name'}));
              print "\n[.]   Handle site: '$siteObj->{'name'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
              # change {'sitename'} in $globalConfig. fetchData() use that config for forming path and get right info from cache/controller 
              $_[0]->{'sitename'}=$siteObj->{'name'};
@@ -705,10 +678,10 @@ sub makeLLD {
        } 
     } else {
       # 'no sites walking' routine code here
-      print "\n[.]   'no sites walking' routine activated";#, if ($_[0]->{'debug'} >= DEBUG_MID);
+      print "\n[.]   'no sites walking' routine activated", if ($_[0]->{'debug'} >= DEBUG_MID);
       # Take objects
       fetchData($_[0], $givenObjType, $objList);
-      print "\n[.]   Objects list:\n\t";#, Dumper $objList if ($_[0]->{'debug'} >= DEBUG_MID);
+      print "\n[.]   Objects list:\n\t", Dumper $objList if ($_[0]->{'debug'} >= DEBUG_MID);
       # Add info to LLD-response 
       addToLLD($_[0], undef, $objList, $lldPiece) if ($objList);
     }
@@ -716,7 +689,7 @@ sub makeLLD {
     # link LLD to {'data'} key
     $result->{'data'} = $lldPiece;
     # make JSON
-    $result=JSON::encode_json($result);
+    $result=JSON::XS::encode_json($result);
     print "\n[<]   generated LLD:\n\t", Dumper $result if ($_[0]->{'debug'} >= DEBUG_HIGH);
     print "\n[-] makeLLD() finished" if ($_[0]->{'debug'} >= DEBUG_LOW);
     return $result;
@@ -737,17 +710,6 @@ sub addToLLD {
     my $result;
     print "\n[+] addToLLD() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
 
-#    my $workList;
-#    my $wlanHash;
-#    if ($objectName eq OBJ_USER) {
-#         print "\n[p1]\n";
-#         fetchData($_[0], OBJ_WLAN, $workList);
-#         foreach my $wlanObj (@{$workList}) {
-#           $wlanHash->{$wlanObj->{'_id'}} = $wlanObj->{'name'};
-#         } 
-#         print Dumper  $wlanHash;
-#    }
-
     foreach $jsonObj (@{$_[2]}) {
       $result=();
       $result->{'{#NAME}'}     = $jsonObj->{'name'};
@@ -755,35 +717,29 @@ sub addToLLD {
       # $_[1] is undefined if script uses with v2 controller or generate LLD for OBJ_SITE  
       $result->{'{#SITENAME}'} = $_[1]->{'name'} if ($_[1]);
       $result->{'{#SITEID}'}   = $_[1]->{'_id'} if ($_[1]);
+      $result->{'{#IP}'}       = $jsonObj->{'ip'}  if ($jsonObj->{'ip'});
+      $result->{'{#MAC}'}      = $jsonObj->{'mac'} if ($jsonObj->{'mac'});
+      # state of object: 0 - off, 1 - on
+      $result->{'{#STATE}'}  = $jsonObj->{'state'} if ($jsonObj->{'state'});
+
       if ($givenObjType eq OBJ_WLAN) {
          # is_guest key could be not exist with 'user' network on v3 
-         $result->{'{#ISGUEST}'}=convert_if_bool($jsonObj->{'is_guest'}) if (exists($jsonObj->{'is_guest'}));
+         # 0+ - convert 'true'/'false' to 1/0 
+         $result->{'{#ISGUEST}'}=0+$jsonObj->{'is_guest'} if (exists($jsonObj->{'is_guest'}));
       } elsif ($givenObjType eq OBJ_USER ) {
          $result->{'{#NAME}'}   = $jsonObj->{'hostname'};
-         $result->{'{#IP}'}     = $jsonObj->{'ip'};
-         $result->{'{#MAC}'}    = $jsonObj->{'mac'};
-#         $result->{'{#WLANID}'} = $jsonObj->{'wlan'};
-#         $result->{'{#WLANNAME}'} = $wlanHash->{$jsonObj->{'wlan'}};
          # sometime {hostname} may be null. UniFi controller replace that hostnames by {'mac'}
-         $result->{'{#NAME}'}   = $result->{'{#MAC}'} unless defined ($result->{'{#NAME}'});
+         $result->{'{#NAME}'}   = $jsonObj->{'hostname'} ? $jsonObj->{'hostname'} : $result->{'{#MAC}'};
       } elsif ($givenObjType eq OBJ_UPH ) {
          $result->{'{#ID}'}     = $jsonObj->{'device_id'};
-         $result->{'{#IP}'}     = $jsonObj->{'ip'};
-         $result->{'{#MAC}'}    = $jsonObj->{'mac'};
-         # state of object: 0 - off, 1 - on
-         $result->{'{#STATE}'}  = $jsonObj->{'state'};
       } elsif ($givenObjType eq OBJ_SITE) {
-         next if (convert_if_bool($jsonObj->{'attr_hidden'}));
+         # 0+ - convert 'true'/'false' to 1/0 
+         next if (0+($jsonObj->{'attr_hidden'}));
          $result->{'{#DESC}'}     = $jsonObj->{'desc'};
-      } elsif ($givenObjType eq OBJ_UAP) {
-         $result->{'{#IP}'}     = $jsonObj->{'ip'};
-         $result->{'{#MAC}'}    = $jsonObj->{'mac'};
-         $result->{'{#STATE}'}  = $jsonObj->{'state'};
-      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
-         $result->{'{#IP}'}     = $jsonObj->{'ip'};
-         $result->{'{#MAC}'}    = $jsonObj->{'mac'};
-         # state of object: 0 - off, 1 - on
-         $result->{'{#STATE}'}  = $jsonObj->{'state'};
+#      } elsif ($givenObjType eq OBJ_UAP) {
+#         ;
+#      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
+#        ;
       }
       push(@{$_[3]}, $result);
     }
