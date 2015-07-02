@@ -25,7 +25,7 @@ For correct using the template and Miner, u must:
 
 1. Install perl modules _JSON::XS_, _LWP_, _IO::Socket::SSL_, _Data::Dumper_ if u want to see debug messages using '-d', Time::HiRes for writing runtime stat (when _write_stat => TRUE_). U can get is with `cpan Module::Name` or `aptitude install libjson-xs-perl libwww-perl libio-socket-ssl-perl libdata-dumper-simple-perl libtime-hires-perl` for Debian;
 3. Stop _zabbix-agent_;
-3. Add to actual _zabbix_agentd.conf_ on box, which hosted UniFi Controller contents of _unifi.conf_ or hook up its with _Include=..._ option. If u use miner before and have other selfmaded keys - move its to new _unifi.conf_;
+3. Add to actual _zabbix_agentd.conf_ on box, which hosted UniFi Controller contents of _unifi.conf_ or hook up its with _Include=..._ option. If u use miner before and have other selfmaded keys - move its to new _unifi.conf_. **Note** that Tempalte use items with _Zabbix agent (active)_. U must turn on Active mode on Zabbix agent;
 4. Put _unifi_miner.pl_ to _/usr/local/bin/zabbix/_  or point _UserParameter=_ to another place;
 5. Replace _username/password/cacheroot/cachetimeout_ variables inside _unifi_miner.pl_ to yours own or use corresponding command-line options (_-u_, _-p_, etc);
 6. Start _zabbix-agent_;
