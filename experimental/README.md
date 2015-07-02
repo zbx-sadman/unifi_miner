@@ -31,7 +31,7 @@ For correct using the template and Miner, u must:
 6. Start _zabbix-agent_;
 7. Import template;
 8. Check and disable unwanted items prototypes if u not brave explorer;
-9. Make and fill _{$FW_UAP_LATEST_VER}_ macro with the value of you consider the last for UAPs. Otherwise - disable annoying trigger;
+9. Make and fill _{$FW_UAP_LATEST_VER}_ macro on host level with the value of you consider the last for UAPs. Otherwise - disable annoying trigger;
 10. Link template to existing host;
 11. Wait some time and chech Latest Data; 
 12. In success try to accelerate Miner with decrease init stage by remark with hash pragmas: _use strict_, _use warnings_, _use Data::Dumper_, _use Time::HiRes_;
