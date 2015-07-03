@@ -66,7 +66,7 @@ my $globalConfig = {
    # Default action for objects metric
    action => ACT_GET,
    # How much time live cache data. Use 0 for disabling cache processes
-   cache_timeout => 10800,
+   cache_timeout => 60,
    # Where are store cache file. Better place is RAM-disk
    cache_root=> '/run/shm', 
    # Debug level 
