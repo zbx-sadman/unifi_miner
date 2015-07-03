@@ -5,7 +5,6 @@
 #
 # 
 #
-
 use strict;
 use warnings;
 use Data::Dumper;
@@ -56,7 +55,6 @@ sub addToLLD;
 sub getMetric;
 sub writeStat;
 sub VERSION_MESSAGE;
-sub HELP_MESSAGE;
 
 
 #########################################################################################################################################
@@ -68,7 +66,7 @@ my $globalConfig = {
    # Default action for objects metric
    action => ACT_GET,
    # How much time live cache data. Use 0 for disabling cache processes
-   cache_timeout => 60,
+   cache_timeout => 10800,
    # Where are store cache file. Better place is RAM-disk
    cache_root=> '/run/shm', 
    # Debug level 
@@ -317,12 +315,14 @@ sub getMetric {
             getMetric($_[0], $_[1][$i], $key, $paramValue); 
             print "\n[.]\t\t paramValue: '$paramValue'" if ($_[0]->{'debug'} >= DEBUG_HIGH);
 
-            # With 'get' action jump out from loop with first recieved value
-            $_[3]=$paramValue, last if ($_[0]->{'action'} eq ACT_GET);
 
             # Otherwise - do something line sum or count
             if (defined($paramValue)) {
                print "\n[.]\t\t act #$_[0]->{'action'} " if ($_[0]->{'debug'} >= DEBUG_MID);
+
+               # With 'get' action jump out from loop with first recieved value
+               $_[3]=$paramValue, last if ($_[0]->{'action'} eq ACT_GET);
+
                # !!! need to fix trying sum of not numeric values
                # With 'sum' - grow $result
                if ($_[0]->{'action'} eq ACT_SUM) { 
@@ -705,7 +705,7 @@ sub addToLLD {
          $_[3][$o]->{'{#SUBSYSTEM}'}= $_[2][$i]->{'subsystem'};
       } elsif ($givenObjType eq OBJ_WLAN) {
          # is_guest key could be not exist with 'user' network on v3 
-         $_[3][$o]->{'{#ISGUEST}'}= $_[2][$i]->{'is_guest'} if (exists($_[2][$i]->{'is_guest'}));
+         $_[3][$o]->{'{#ISGUEST}'}= 0+$_[2][$i]->{'is_guest'} if (exists($_[2][$i]->{'is_guest'}));
       } elsif ($givenObjType eq OBJ_USER ) {
          $_[3][$o]->{'{#NAME}'}   = $_[2][$i]->{'hostname'};
          # sometime {hostname} may be null. UniFi controller replace that hostnames by {'mac'}
@@ -719,7 +719,7 @@ sub addToLLD {
       } elsif ($givenObjType eq OBJ_USW_PORT) {
          $_[3][$o]->{'{#PORTIDX}'}     = $_[2][$i]->{'port_idx'};
          $_[3][$o]->{'{#MEDIA}'}     = $_[2][$i]->{'media'};
-         $_[3][$o]->{'{#UP}'}     = $_[2][$i]->{'up'};
+         $_[3][$o]->{'{#UP}'}     = 0+$_[2][$i]->{'up'};
 #      } elsif ($givenObjType eq OBJ_UAP) {
 #         ;
 #      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
