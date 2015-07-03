@@ -84,7 +84,7 @@ You can get 'Other HTTP error: 500' while connect to UniFi controller. And when 
 
 For using statistic store feature you need to install `cpan Time::HiRes` (or `aptitude install libtime-hires-perl`) module and set needful values for _statfile_, _writestat_ variables. _Time::HiRes_ allow to get right time of Miner's internal subroutines execution (result not include time speded to perl modules init). If not required to use this feature, you can remark `use Time::HiRes` and set _writestat_ to FALSE inside Miner code. Then you could accelerate Miner a little.
 
-Now i was reach time of once execution ~0m0.020s (with new code and using PPerl, data from cache, no Zabbix agent worked) vice ~0m0.120s (with old code and without PPerl, data from cache, no Zabbix agent worked) on my virtual linux box, which hosted UniFi Controller. Command to measure is `time ./unifi_miner.pl -o uap  -k "vap_table.[is_guest=1].is_guest" -a sum`. 
+Now i was reach time of once execution ~0m0.020s (with new code and using PPerl, data from cache, no Zabbix agent worked, 6 UAPs) vice ~0m0.120s (with old code and without PPerl, data from cache, no Zabbix agent worked, 6 UAPs) on my virtual linux box, which hosted UniFi Controller. Command to measure is `time ./unifi_miner.pl -o uap  -k "vap_table.[is_guest=1].is_guest" -a sum`. 
 
 How to replace old edition of UniFi Miner accelerated with PPerl to new: 
 
