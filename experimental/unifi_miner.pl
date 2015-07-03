@@ -5,9 +5,9 @@
 #
 # 
 #
-#use strict;
-#use warnings;
-#use Data::Dumper;
+use strict;
+use warnings;
+use Data::Dumper;
 #use Time::HiRes ('clock_gettime');
 use Getopt::Std ();
 use JSON::XS ();
@@ -616,7 +616,6 @@ sub makeLLD {
     my $givenObjType=$_[0]->{'object'}, my $siteWalking=TRUE;
 
     $siteWalking=FALSE if (($givenObjType eq OBJ_USW_PORT) && ($_[0]->{'version'} eq CONTROLLER_VERSION_4) || ($_[0]->{'version'} eq CONTROLLER_VERSION_3));
-    print "\n[.]$siteWalking";
 
     if (! $siteWalking) {
        # 'no sites walking' routine code here
