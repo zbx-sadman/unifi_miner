@@ -1,10 +1,10 @@
 ## UniFi Miner
+Actual release is v1.0.0: [read overview & download](https://github.com/zbx-sadman/unifi_miner/releases). 
 
-is a small tool written in Perl, which helps deliver to the monitoring system (Zabbix) operational data - metrics and settings obtained from the UniFi controller via API, provided by Ubiquiti. Zabbix's Low-level Discovery (LLD) protocol are supported.
+It is a small tool written in Perl, which helps deliver to the monitoring system (Zabbix) operational data - metrics and settings obtained from the UniFi controller via API, provided by Ubiquiti. Zabbix's Low-level Discovery (LLD) protocol are supported.
 
 ![Zabbix: connected clients](http://community.ubnt.com/t5/image/serverpage/image-id/53219iB1CA79D24EFB2BEB/image-size/original)
 
-Actual release is v1.0.0: [read overview & download](https://github.com/zbx-sadman/unifi_miner/releases). 
 
 If you have a question about Miner, please, read [Russian] (https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-Russian) or 
 [English](https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-English) (translating in progress) guide.
