@@ -1,19 +1,18 @@
 # Experimental place
 
 ### 10.07.2015
-- Miner 1.0.0 released, Miner2 (work name - UniFi Proxy) started;
+- Miner 1.0.0 released, [Miner2](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental/UniFi_Proxy) (work name - UniFi Proxy) started;
 
 #### Notes
 
-Miner2 branch based on code of Miner 1.0.0 and act as TCP server with fork support. It wait to request and response with metric value or action result. 
-All user settings placed into .conf file (see path inside _miner2_tcp.pl->$confFileName_). Listen port defined via _.conf->listen_port_ option and the 
-number of simultaneous connections defined via _.conf->max_connections_.
+[Miner2](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental/UniFi_Proxy) branch based on code of Miner 1.0.0 and act as TCP server with fork support. It wait to request and response with metric value or action result. 
+All user settings placed into .conf file (see path inside _miner2_tcp.pl->$confFileName_). Listen port defined via _.conf->listen_port_ option and the number of simultaneous connections defined via _.conf->max_connections_.
 
 Format of request is: _action,object_type,sitename,key,id (not mac!),username,userpass,version,cache_timeout_. Empty (skipped) value replaced with defaults.
 
 How to use:
  1. With netcat `echo "get,uap,default,name,<id_of_uap>" | nc 127.0.0.1 7777`;
- 2. With umtcp_get (u need to compile _umtcp_get.c_): `umtcp_get 127.0.0.1 7777 "discovery,uap"
+ 2. With umtcp_get (u need to compile _umtcp_get.c_): `umtcp_get 127.0.0.1 7777 "discovery,uap"`
  3. With Zabbix loadable module (u need to compile unifi.c and something else): use Item key (type: Zabbix agent (active)) _unifi.proxy_ as _unifi.proxy[sum,uap,default,_num-sta]_
 
 To Zabbix integration example see _unifi.conf_ file.
@@ -39,7 +38,6 @@ Miner2 allow to reach on my installation:
 Used measurement command: `time zabbix_agentd -t "unifi.proxy[sum,uap,default,vap_table.[is_guest=1].is_guest]"`.
 
 Miner 1.0.0 without PPerl have _real 0m0.056s_, with PPerl - _real 0m0.023s_.
-
 
 ### 02.07.2015
 - No more JSON wrap module supported;
