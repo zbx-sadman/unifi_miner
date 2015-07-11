@@ -25,7 +25,7 @@ How to compile & use Zabbix loadable module unifi.so:
  5. `chown zabbix:zabbix unifi.so` & `mv -f ./unifi.so /usr/local/lib/zabbix/agent` or to other dir;
  6. Add _LoadModulePath=/usr/local/lib/zabbix/agent/_ & _LoadModule=unifi.so_ to your zabbix_agentd.conf;
  7. Restart Zabbix agent: `service zabbix-agent restart`;
- 8. If _miner2_tcp.pl_ as server, try `zabbix_agentd -t unifi.proxy[discovery,wlan,default]`;
+ 8. If _miner2_tcp.pl_ running as server, try `zabbix_agentd -t unifi.proxy[discovery,wlan,default]`;
  9. On success - use _unifi.proxy_ key with yours templates.
 
 Template example for Zabbix v2.4.5 here: [zbx_v2_4_Template_UBNT_UniFi_Proxy.xml](https://raw.githubusercontent.com/zbx-sadman/unifi_miner/master/experimental/UniFi_Proxy/zbx_v2_4_Template_UBNT_UniFi_Proxy.xml)
