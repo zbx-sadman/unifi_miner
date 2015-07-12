@@ -28,7 +28,7 @@ How to compile & use Zabbix loadable module unifi.so:
  8. If _unifi_proxy.pl_ running as server, try `zabbix_agentd -t unifi.proxy[discovery,wlan,default]`;
  9. On success - use _unifi.proxy_ key with yours templates.
 
-Template example for Zabbix v2.4.5 here: [zbx_v2_4_Template_UBNT_UniFi_Proxy.xml](https://raw.githubusercontent.com/zbx-sadman/unifi_miner/master/experimental/unifi_proxy/zbx_v2_4_Template_UBNT_UniFi_Proxy.xml)
+Template example for Zabbix v2.4.5 here: [zbx_v2_4_Template_UBNT_UniFi_Proxy.xml](https://raw.githubusercontent.com/zbx-sadman/unifi_miner/master/experimental/unifi_proxy/zabbix_template/zbx_v2_4_Template_UBNT_UniFi_Proxy.xml)
 
 Miner2 allow to reach on my installation:
 - with netcat _real 0m0.011s_
