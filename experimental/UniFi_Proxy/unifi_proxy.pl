@@ -9,6 +9,7 @@ use POSIX;
 use POSIX ":sys_wait_h";
 use IO::Socket;
 use IO::Handle;
+use IO::Socket::SSL ();
 
 use constant {
      ACT_COUNT => 'count',
@@ -17,6 +18,7 @@ use constant {
      ACT_DISCOVERY => 'discovery',
      BY_CMD => 1,
      BY_GET => 2,
+     CONFIG_FILE_DEFAULT => '/home/sadman/unifi_proxy.conf',
      CONTROLLER_VERSION_2 => 'v2',
      CONTROLLER_VERSION_3 => 'v3',
      CONTROLLER_VERSION_4 => 'v4',
@@ -24,7 +26,6 @@ use constant {
      DEBUG_MID => 2,
      DEBUG_HIGH => 3,
      KEY_ITEMS_NUM => 'items_num',
-     MINER_VERSION => '2.0.0',
      MSG_UNKNOWN_CONTROLLER_VERSION => 'Version of controller is unknown: ',
      OBJ_USW => 'usw',
      OBJ_USW_PORT => 'usw_port',
@@ -36,17 +37,18 @@ use constant {
      OBJ_SITE => 'site',
      OBJ_HEALTH => 'health',
 #     OBJ_SYSINFO => 'sysinfo',
+     TOOL_NAME => 'UniFi Proxy',
+     TOOL_VERSION => '1.0.0',
+     TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_proxy',
+     SERVER_DEFAULT_IP => '127.0.0.1',
+     SERVER_DEFAULT_PORT => 7777,
+     SERVER_DEFAULT_CONNLIMIT => 10,
      TRUE => 1,
      FALSE => 0,
 
 };
 
-
-my $pid = fork();
-exit() if $pid;
-die "Couldn't fork: $! " unless defined($pid);
-# Link session to term
-POSIX::setsid() || die "[!] Can't start a new session ($!)";
+IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => 0));
 
 sub addToLLD;
 sub fetchData;
@@ -58,7 +60,46 @@ sub handleTERMSignal;
 sub makeLLD;
 sub readConf;
 
-my $confFileName='/etc/unifi_miner/miner.conf';
+my $options, my $ck, my $wk, my $res;
+foreach my $arg (@ARGV) {
+  # try to take key from arg[i]
+  ($ck) =  $arg =~ m/^-(.+)/;
+  # key is '--version' ? Set flag && do nothing inside loop
+  $options->{'version'} = TRUE, next if ($ck && ($ck eq '-version'));
+  # key is --help - do the same
+  $options->{'help'} = TRUE, next if ($ck && ($ck eq '-help'));
+  # key is defined? Init hash item
+  $options->{$ck}='' if ($ck);
+  # not defined - store value to hash item with 'key' id.
+  $options->{$wk}=$arg, next unless ($ck);
+  # remember key for next loop, where it may be used for storing value to hash
+  $wk=$ck;
+}
+            
+
+if ($options->{'version'}) {
+   print "\n",TOOL_NAME," v", TOOL_VERSION ,"\n";
+   exit 0;
+}
+  
+if ($options->{'help'}) {
+   print "\n",TOOL_NAME," v", TOOL_VERSION, "\n\nusage: $0 [-C /path/to/config/file] [-D]",
+          "\n\t-C\tpath to config file\n\t-D\trun in daemon mode\n\nAll other help on ", TOOL_HOMEPAGE, "\n\n";
+   exit 0;
+}
+
+# take config filename from -"C"onfig option or from `default` const 
+my $configFile=(defined ($options->{'C'})) ? $options->{'C'} : CONFIG_FILE_DEFAULT;
+
+# in not defined -"F"oregroundMode option - going to daemon mode
+#unless (defined ($options->{'F'})) {
+if (defined ($options->{'D'})) {
+   my $pid = fork();
+   exit() if $pid;
+   die "Couldn't fork: $! " unless defined($pid);
+   # Link session to term
+   POSIX::setsid() || die "[!] Can't start a new session ($!)";
+}
 
 my $globalConfig;
 my $stopNow = 0;
@@ -66,10 +107,14 @@ my $stopNow = 0;
 # read config on start 
 readConf;
 
+print "\n\t", Dumper $globalConfig, "\n";
+
 $SIG{INT}= $SIG{TERM} = \&handleTERMSignal;
 $SIG{HUP} = \&readConf;
-#LocalAddr => $globalConfig->{'listen_ip'},  
-my $server = IO::Socket::INET->new(LocalPort => $globalConfig->{'listen_port'}, ReuseAddr => 1, Listen => $globalConfig->{'max_connections'});
+my $server = IO::Socket::INET->new(LocalAddr => $globalConfig->{'listenip'}, 
+                                   LocalPort => $globalConfig->{'listenport'}, 
+                                   Listen => $globalConfig->{'connlimit'},
+                                   ReuseAddr => 1); 
 
 # loop while not recieved $SIG{INT} or $SIG{TERM} and handleTERMSignal not called
 until($stopNow){
@@ -150,26 +195,26 @@ sub handleConnection {
     $gC->{'action'}        = $opt_a if ($opt_a);
     $gC->{'id'}            = $opt_i if ($opt_i);
     $gC->{'key'}           = $opt_k if ($opt_k);
-    $gC->{'object'}        = $opt_o if ($opt_o);
-    $gC->{'username'}      = $opt_u if ($opt_u);
-    $gC->{'password'}      = $opt_p if ($opt_p);
-    $gC->{'version'}       = $opt_v if ($opt_v);
-    $gC->{'cache_timeout'} = $opt_c if ($opt_c);
+    $gC->{'objecttype'}    = $opt_o if ($opt_o);
+    $gC->{'unifiuser'}     = $opt_u if ($opt_u);
+    $gC->{'unifipass'}     = $opt_p if ($opt_p);
+    $gC->{'unifiversion'}      = $opt_v if ($opt_v);
+    $gC->{'cachemaxage'}  = $opt_c if ($opt_c);
 
     # opt_s not '' (virtual -s option used) -> use given sitename. Otherwise use 'default'
     $gC->{'sitename'}      = ($opt_s) ? ($opt_s) : $gC->{'default_sitename'};
     # flag for LLD routine
     $gC->{'sitename_given'}= TRUE if ($opt_s);
 
-    $gC->{'api_path'} = "$gC->{'location'}/api";
-    $gC->{'login_path'} = "$gC->{'location'}/api/login";
-    $gC->{'logout_path'} = "$gC->{'location'}/logout";
-    $gC->{'login_data'} = "username=$gC->{'username'}&password=$gC->{'password'}&login=login";
-    $gC->{'login_type'} = 'x-www-form-urlencoded';
+    $gC->{'api_path'}      = "$gC->{'location'}/api";
+    $gC->{'login_path'}    = "$gC->{'location'}/api/login";
+    $gC->{'logout_path'}   = "$gC->{'location'}/logout";
+    $gC->{'login_data'}    = "username=$gC->{'unifiuser'}&password=$gC->{'unifipass'}&login=login";
+    $gC->{'login_type'}    = 'x-www-form-urlencoded';
 
     # Set controller version specific data
-    if ($gC->{'version'} eq CONTROLLER_VERSION_4) {
-       $gC->{'login_data'} = "{\"username\":\"$gC->{'username'}\",\"password\":\"$gC->{'password'}\"}",
+    if ($gC->{'unifiversion'} eq CONTROLLER_VERSION_4) {
+       $gC->{'login_data'} = "{\"username\":\"$gC->{'unifiuser'}\",\"password\":\"$gC->{'unifipass'}\"}",
        $gC->{'login_type'} = 'json',
        # Data fetch rules.
        # BY_GET mean that data fetched by HTTP GET from .../api/[s/<site>/]{'path'} operation.
@@ -188,7 +233,7 @@ sub handleConnection {
           &OBJ_USER     => {'method' => BY_GET, 'path' => 'stat/sta'},
           &OBJ_WLAN     => {'method' => BY_GET, 'path' => 'list/wlanconf'}
        };
-    } elsif ($gC->{'version'} eq CONTROLLER_VERSION_3) {
+    } elsif ($gC->{'unifiversion'} eq CONTROLLER_VERSION_3) {
        $gC->{'fetch_rules'} = {
           # `&` let use value of constant, otherwise we have 'OBJ_UAP' => {...} instead 'uap' => {...}
           &OBJ_SITE => {'method' => BY_CMD, 'path' => 'cmd/sitemgr', 'cmd' => '{"cmd":"get-sites"}'},
@@ -197,7 +242,7 @@ sub handleConnection {
           &OBJ_USER => {'method' => BY_GET, 'path' => 'stat/sta'},
           &OBJ_WLAN => {'method' => BY_GET, 'path' => 'list/wlanconf'}
        };
-    } elsif ($gC->{'version'} eq CONTROLLER_VERSION_2) {
+    } elsif ($gC->{'unifiversion'} eq CONTROLLER_VERSION_2) {
        $gC->{'fetch_rules'} = {
        # `&` let use value of constant, otherwise we have 'OBJ_UAP' => {...} instead 'uap' => {...}
           &OBJ_UAP  => {'method' => BY_GET, 'path' => 'stat/device', 'excl_sitename' => TRUE},
@@ -205,11 +250,15 @@ sub handleConnection {
           &OBJ_USER => {'method' => BY_GET, 'path' => 'stat/sta', 'excl_sitename' => TRUE}
        };
     } else {
-       return "[!]", MSG_UNKNOWN_CONTROLLER_VERSION, ": '$gC->{'version'},'";
+       return "[!]", MSG_UNKNOWN_CONTROLLER_VERSION, ": '$gC->{'unifiversion'},'";
     }
 
-     print "\n\t", Dumper $gC, "\n" if  ($gC->{'debug'} >= DEBUG_MID);
+ 
+#     print "\n\t", Dumper $gC, "\n" if  ($gC->{'debug'} >= DEBUG_MID);
+#     print "\n\t", Dumper $gC, "\n";
+#     die;
 
+#    print "object handling ... not supported for v..." unless $gC->fetch_rules->{obj};
     
     if ($gC->{'action'} eq ACT_DISCOVERY) {
        # Call sub for made LLD-like JSON
@@ -224,15 +273,15 @@ sub handleConnection {
           # if $globalConfig->{'id'} is exist then metric of this object has returned. 
           # If not - calculate $globalConfig->{'action'} for all items in objects list (all object of type = 'object name', for example - all 'uap'
           # load JSON data & get metric
-          print "\n[*] Key Given" if ($globalConfig->{'debug'} >= DEBUG_LOW);
-          fetchData($globalConfig, $globalConfig->{'sitename'}, $globalConfig->{'object'}, \@objJSON);
+          print "\n[*] Key given: $globalConfig->{'key'}" if ($globalConfig->{'debug'} >= DEBUG_LOW);
+          fetchData($globalConfig, $globalConfig->{'sitename'}, $globalConfig->{'object_type'}, \@objJSON);
           # Logout need if logging in before (in fetchData() sub) completed
           print "\n[*] Logout from UniFi controller" if ($globalConfig->{'debug'} >= DEBUG_LOW);
           $gC->{'ua'}->get($gC->{'logout_path'}) if ($gC->{'logged_in'});
           getMetric($globalConfig, \@objJSON, $globalConfig->{'key'}, $res);
       } else { 
 #          return 
-die '[!] Key is unknown - nothing to do';
+           die '[!] No key given - nothing to do';
       }
     }
 
@@ -242,7 +291,7 @@ die '[!] Key is unknown - nothing to do';
     print "\n" if  ($gC->{'debug'} >= DEBUG_LOW);
 
     # Push result of work to stdout
-    print $socket (defined($res) ? "$res" : "\n");
+    print $socket (defined($res) ? "$res" : '\n');
 }
 
 #*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/
@@ -399,7 +448,7 @@ sub fetchData {
    # $_[2] - object type
    # $_[3] - jsonData object ref
    print "\n[+] fetchData() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   print "\n[>]\t args: object type: '$_[0]->{'object'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
+   print "\n[>]\t args: object type: '$_[0]->{'objecttype'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
    print ", id: '$_[0]->{'id'}'" if ($_[0]->{'debug'} >= DEBUG_MID && $_[0]->{'id'});
    print ", mac: '$_[0]->{'mac'}'" if ($_[0]->{'debug'} >= DEBUG_MID && $_[0]->{'mac'});
    my $cacheExpire=FALSE, my $needReadCache=TRUE, my $fh, my $jsonData, my $cacheFileName, my $tmpCacheFileName, my $objID,
@@ -407,19 +456,19 @@ sub fetchData {
 
    $objPath  = $_[0]->{'api_path'} . ($_[0]->{'fetch_rules'}->{$_[2]}->{'excl_sitename'} ? '' : "/s/$_[1]") . "/$_[0]->{'fetch_rules'}->{$_[2]}->{'path'}";
    # if MAC is given with command-line option -  RapidWay for Controller v4 is allowed
-   $objPath.="/$_[0]->{'mac'}" if (($_[0]->{'version'} eq CONTROLLER_VERSION_4) && ($givenObjType eq OBJ_UAP) && $_[0]->{'mac'});
+   $objPath.="/$_[0]->{'mac'}" if (($_[0]->{'unifiversion'} eq CONTROLLER_VERSION_4) && ($givenObjType eq OBJ_UAP) && $_[0]->{'mac'});
    print "\n[.]\t\t Object path: '$objPath'" if ($_[0]->{'debug'} >= DEBUG_MID);
 
    ################################################## Take JSON  ##################################################
 
    # If cache timeout setted to 0 then no try to read/update cache - fetch data from controller
-   if (0 == $_[0]->{'cache_timeout'}) {
+   if (0 == $_[0]->{'cachemaxage'}) {
       print "\n[.]\t\t No read/update cache because cache timeout = 0" if ($_[0]->{'debug'} >= DEBUG_MID);
       fetchDataFromController($_[0], $objPath, $jsonData);
    } else {
       # Change all [:/.] to _ to make correct filename
       ($cacheFileName = $objPath) =~ tr/\/\:\./_/;
-      $cacheFileName = $_[0]->{'cache_root'} .'/'. $cacheFileName;
+      $cacheFileName = $_[0]->{'cacheroot'} .'/'. $cacheFileName;
       # Cache filename point to dir? If so - die to avoid problem with read or link/unlink operations
       die "[!] Can't handle '$tmpCacheFileName' through its dir, stop." if (-d $cacheFileName);
       print "\n[.]\t\t Cache file name: '$cacheFileName'" if ($_[0]->{'debug'} >= DEBUG_MID);
@@ -428,7 +477,7 @@ sub fetchData {
          # Yes, is exist.
          # If cache is expire...
          my @fileStat=stat($cacheFileName);
-         $cacheExpire = TRUE if (($fileStat[9] + $_[0]->{'cache_timeout'}) < time()) 
+         $cacheExpire = TRUE if (($fileStat[9] + $_[0]->{'cachemaxage'}) < time()) 
          # Cache file is not exist => cache is expire => need to create
       } else { 
          $cacheExpire = TRUE; 
@@ -479,7 +528,7 @@ sub fetchData {
        # close cache
        close $fh or die "[!] Can't close cache file ($!), stop.";
     }
-  } # if (0 == $_[0]->{'cache_timeout'})
+  } # if (0 == $_[0]->{'cachemaxage'})
 
   ################################################## JSON processing ##################################################
 
@@ -516,16 +565,16 @@ sub fetchDataFromController {
    # $_[0] - GlobalConfig
    # $_[1] - object path
    # $_[2] - jsonData object ref
-   my $response, my $fetchType=$_[0]->{'fetch_rules'}->{$_[0]->{'object'}}->{'method'}, 
-   my $fetchCmd=$_[0]->{'fetch_rules'}->{$_[0]->{'object'}}->{'cmd'};
+   my $response, my $fetchType=$_[0]->{'fetch_rules'}->{$_[0]->{'objecttype'}}->{'method'}, 
+   my $fetchCmd=$_[0]->{'fetch_rules'}->{$_[0]->{'objecttype'}}->{'cmd'};
 
    print "\n[+] fetchDataFromController() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
    print "\n[>]\t args: object path: '$_[1]'" if ($_[0]->{'debug'} >= DEBUG_MID);
 
    # HTTP UserAgent init
    # Set SSL_verify_mode=off to login without certificate manipulation
-   $_[0]->{'ua'} = LWP::UserAgent-> new(cookie_jar => {}, agent => "UniFi Miner/" . MINER_VERSION . " (perl engine)",
-                                                            ssl_opts => {SSL_verify_mode => 0, verify_hostname => 0}) unless ($_[0]->{'ua'});
+   $_[0]->{'ua'} = LWP::UserAgent-> new(cookie_jar => {}, agent => TOOL_NAME."/".TOOL_VERSION." (perl engine)",
+                                        ssl_opts => {SSL_verify_mode => 0, verify_hostname => 0}) unless ($_[0]->{'ua'});
 
    ################################################## Logging in  ##################################################
    # how to check 'still logged' state?
@@ -534,12 +583,12 @@ sub fetchDataFromController {
      $response=$_[0]->{'ua'}->post($_[0]->{'login_path'}, 'Content_type' => "application/$_[0]->{'login_type'}", 'Content' => $_[0]->{'login_data'});
      print "\n[>>]\t\t HTTP respose:\n\t", Dumper $response if ($_[0]->{'debug'} >= DEBUG_HIGH);
      my $rc=$response->code;
-     if ($_[0]->{'version'} eq CONTROLLER_VERSION_4) {
+     if ($_[0]->{'unifiversion'} eq CONTROLLER_VERSION_4) {
         # v4 return 'Bad request' (code 400) on wrong auth
         die "\n[!] Login error: code $rc, stop." if ($rc eq '400');
         # v4 return 'OK' (code 200) on success login and must die only if get error
         die "\n[!] Other HTTP error: $rc, stop." if ($response->is_error);
-     } elsif (($_[0]->{'version'} eq CONTROLLER_VERSION_3) || ($_[0]->{'version'} eq CONTROLLER_VERSION_2)) {
+     } elsif (($_[0]->{'unifiversion'} eq CONTROLLER_VERSION_3) || ($_[0]->{'unifiversion'} eq CONTROLLER_VERSION_2)) {
         # v3 return 'OK' (code 200) on wrong auth
         die "\n[!] Login error: $rc, stop." if ($response->is_success );
         # v3 return 'Redirect' (code 302) on success login and must die only if code<>302
@@ -587,11 +636,11 @@ sub makeLLD {
     # $_[1] - result
 
     print "\n[+] makeLLD() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-    print "\n[>]\t args: object type: '$_[0]->{'object'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
+    print "\n[>]\t args: object type: '$_[0]->{'objecttype'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
     my $jsonObj, my $lldResponse, my $lldPiece, my $siteList=(), my $objList, 
-    my $givenObjType=$_[0]->{'object'}, my $siteWalking=TRUE;
+    my $givenObjType=$_[0]->{'objecttype'}, my $siteWalking=TRUE;
 
-    $siteWalking=FALSE if (($givenObjType eq OBJ_USW_PORT) && ($_[0]->{'version'} eq CONTROLLER_VERSION_4) || ($_[0]->{'version'} eq CONTROLLER_VERSION_3));
+    $siteWalking=FALSE if (($givenObjType eq OBJ_USW_PORT) && ($_[0]->{'unifiversion'} eq CONTROLLER_VERSION_4) || ($_[0]->{'unifiversion'} eq CONTROLLER_VERSION_3));
 
     if (! $siteWalking) {
        # 'no sites walking' routine code here
@@ -654,9 +703,9 @@ sub addToLLD {
     # $_[1] - Site object
     # $_[2] - Incoming objects list
     # $_[3] - Outgoing objects list
-    my $givenObjType=$_[0]->{'object'};
+    my $givenObjType=$_[0]->{'objecttype'};
     print "\n[+] addToLLD() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-    print "\n[>]\t args: object type: '$_[0]->{'object'}', site name: '$_[1]->{'name'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
+    print "\n[>]\t args: object type: '$_[0]->{'objecttype'}', site name: '$_[1]->{'name'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
 
     # $i - incoming object's array element pointer. 
     # $o - outgoing object's array element pointer, init as length of that array to append elements to the end
@@ -713,21 +762,36 @@ sub addToLLD {
 #*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/
 sub readConf {
     $globalConfig=undef;
-    open(my $fh, $confFileName) || die "Can't open config file \n";
+    open(my $fh, $configFile) || die "Can't open config file \n";
     # Read default values for global scope from config file
     while(my $line=<$fh>){
          $line =~ /^($|#)/ && next;
          chomp($line);
          # 'key =    value' => 'key' & 'value'
          my ($key, $val)= $line =~ m/\s*(\w+)\s*=\s*(\S*)\s*/;
-         $globalConfig->{$key} = $val;
+         $globalConfig->{lc($key)} = $val;
     }
     close($fh);
 
-   # cast literal to digital
-   $globalConfig->{'write_stat'} += 0, $globalConfig->{'cache_timeout'} += 0, $globalConfig->{'debug'} += 0;
+   $globalConfig->{'listenip'}      = SERVER_DEFAULT_IP unless (defined($globalConfig->{'listenip'}));
+   $globalConfig->{'listenport'}    = SERVER_DEFAULT_PORT unless (defined($globalConfig->{'listenport'}));
+   $globalConfig->{'connlimit'}     = SERVER_DEFAULT_CONNLIMIT unless (defined($globalConfig->{'connlimit'}));
 
-   #
+   $globalConfig->{'action'}  	    = ACT_DISCOVERY unless (defined($globalConfig->{'action'}));
+   $globalConfig->{'objecttype'}    = OBJ_WLAN unless (defined($globalConfig->{'objecttype'}));
+
+   $globalConfig->{'cacheroot'}     = '/run/shm' unless (defined($globalConfig->{'cacheroot'}));
+   $globalConfig->{'cachemaxage'}   = 60 unless (defined($globalConfig->{'cachemaxage'}));
+   $globalConfig->{'unifilocation'} = '127.0.0.1:8443' unless (defined($globalConfig->{'unifilocation'}));
+   $globalConfig->{'unifiversion'}  = CONTROLLER_VERSION_4 unless (defined($globalConfig->{'unifiversion'}));
+   $globalConfig->{'unifiuser'}     = 'admin' unless (defined($globalConfig->{'unifiuser'}));
+   $globalConfig->{'unifipass'}     = 'ubnt' unless (defined($globalConfig->{'unifipass'}));
+   $globalConfig->{'debuglevel'}    = FALSE unless (defined($globalConfig->{'debuglevel'}));
+   $globalConfig->{'sitename'}      = 'default' unless (defined($globalConfig->{'sitename'}));
+
+   # cast literal to digital
+   $globalConfig->{'cachemaxage'} += 0, $globalConfig->{'debuglevel'} += 0;
+
    ############################  Service keys here. Do not change. #############################################################
    #
    # HiRes time of Miner internal processing start (not include Module Init stage)
@@ -748,4 +812,5 @@ sub readConf {
    $globalConfig->{'default_sitename'} = 'default';
    # -s option used sign
    $globalConfig->{'sitename_given'} = FALSE;
+
 }

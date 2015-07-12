@@ -1,26 +1,34 @@
-#define UNIFI_PROXY_IP "127.0.0.1"
-#define UNIFI_PROXY_PORT 7777
-#define UNIFI_PROXY_TIMEOUT 5
-
 #include "sysinc.h"
 #include "module.h"
 #include "comms.h"
 #include "common.h"
 #include "zbxmedia.h"
 #include "log.h"
+#include "cfg.h"
 
+static char	ZBX_MODULE_NAME[] 		  =  "unifi.so";
+static char	DEFAULT_UNIFI_PROXY_SERVER[]      =  "localhost";
+static char	DEFAULT_UNIFI_PROXY_CONFIG_FILE[] =  "unifi_proxy.conf";
+static int	DEFAULT_UNIFI_PROXY_PORT	  =  7777;
+
+extern char 	*CONFIG_LOAD_MODULE_PATH;
+
+char 		*UNIFI_PROXY_SERVER;
+int 		UNIFI_PROXY_PORT;
+
+    
 
 /* the variable keeps timeout setting for item processing */
 static int	item_timeout = 0;
 
-int	zbx_module_unifi_ping(AGENT_REQUEST *request, AGENT_RESULT *result);
+int	zbx_module_unifi_alive(AGENT_REQUEST *request, AGENT_RESULT *result);
 int	zbx_module_unifi_proxy(AGENT_REQUEST *request, AGENT_RESULT *result);
 
 static ZBX_METRIC keys[] =
 /*      KEY                     FLAG		FUNCTION        	TEST PARAMETERS */
 {
-	{"unifi.ping",		0,		zbx_module_unifi_ping,	NULL},
-	{"unifi.proxy",		CF_HAVEPARAMS,	zbx_module_unifi_proxy, 	"discovery"},
+	{"unifi.alive",		0,		zbx_module_unifi_alive,	NULL},
+	{"unifi.proxy",		CF_HAVEPARAMS,	zbx_module_unifi_proxy, "discovery"},
 	{NULL}
 };
 
@@ -67,7 +75,7 @@ ZBX_METRIC	*zbx_module_item_list()
 	return keys;
 }
 
-int	zbx_module_unifi_ping(AGENT_REQUEST *request, AGENT_RESULT *result)
+int	zbx_module_unifi_alive(AGENT_REQUEST *request, AGENT_RESULT *result)
 {
 	SET_UI64_RESULT(result, 1);
 
@@ -78,17 +86,16 @@ int	zbx_module_unifi_proxy(AGENT_REQUEST *request, AGENT_RESULT *result)
 {
         int             ret;
         int 		i, p, np;
-	char		*param;
         zbx_sock_t	s;
-        char		send_buf[MAX_STRING_LEN];
-
+        char		send_buf[MAX_STRING_LEN]
+	    
         *send_buf='\0';
 
         np = request->nparam;
 	if (9 < request->nparam)
 	{
 		/* set optional error message */
-		SET_MSG_RESULT(result, strdup("So much parameters."));
+		SET_MSG_RESULT(result, strdup("So much parameters given."));
 		return SYSINFO_RET_FAIL;
 	}
         // make request string by concatenate all params
@@ -100,8 +107,10 @@ int	zbx_module_unifi_proxy(AGENT_REQUEST *request, AGENT_RESULT *result)
             send_buf[p+1]='\0';
           }
 
+
         // Connect to UniFi Proxy
-        if (SUCCEED == (ret = zbx_tcp_connect(&s, CONFIG_SOURCE_IP, UNIFI_PROXY_IP, UNIFI_PROXY_PORT, UNIFI_PROXY_TIMEOUT)))
+        // item_timeout or (item_timeout-1) ?
+        if (SUCCEED == (ret = zbx_tcp_connect(&s, CONFIG_SOURCE_IP, UNIFI_PROXY_SERVER, UNIFI_PROXY_PORT, item_timeout-1)))
         {
             // Send request
             if (SUCCEED == (ret = zbx_tcp_send_raw(&s, send_buf)))
@@ -116,14 +125,62 @@ int	zbx_module_unifi_proxy(AGENT_REQUEST *request, AGENT_RESULT *result)
 
         if (FAIL == ret)
            {
-                zabbix_log(LOG_LEVEL_DEBUG, "UniFi check error: %s", zbx_tcp_strerror());
-		SET_MSG_RESULT(result, strdup("Operation error, see log on debug level"));
+						
+		zabbix_log(LOG_LEVEL_DEBUG, "%s: communication error: %s", ZBX_MODULE_NAME, zbx_tcp_strerror());
+		SET_MSG_RESULT(result, strdup(zbx_tcp_strerror()));
                 return SYSINFO_RET_FAIL;
            }
 
 	return SYSINFO_RET_OK;
 }
 
+/******************************************************************************
+*                                                                            *
+* Function: zbx_module_set_defaults                                          *
+*                                                                            *
+* Purpose:                                                                   *
+*                                                                            *
+* Comment:                                                                   *
+*                                                                            *
+******************************************************************************/
+static void	zbx_module_set_defaults()
+{
+	if (NULL == UNIFI_PROXY_SERVER)
+    	    UNIFI_PROXY_SERVER = zbx_strdup(UNIFI_PROXY_SERVER, DEFAULT_UNIFI_PROXY_SERVER);
+
+	if (0 == UNIFI_PROXY_PORT)
+    	    UNIFI_PROXY_PORT = DEFAULT_UNIFI_PROXY_PORT;
+}
+    		
+    		
+/******************************************************************************
+*                                                                             *
+* Function: zbx_module_load_config                                            *
+*                                                                             *
+* Purpose:                                                                    *
+*                                                                             *
+* Return value:                                                               *
+*                                                                             *
+*                                                                             *
+* Comment:                                                                    *
+*                                                                             *
+******************************************************************************/
+static void	zbx_module_load_config()
+{
+        char	conf_file[MAX_STRING_LEN];
+
+
+	static struct cfg_line cfg[] =
+        {
+    	    {"UniFiProxyServer",	&UNIFI_PROXY_SERVER,	TYPE_STRING,	PARM_OPT,	0,	0},
+    	    {"UniFiProxyPort",		&UNIFI_PROXY_PORT,	TYPE_UINT64,	PARM_OPT,	0,	0},
+        };
+        		    
+	zbx_snprintf(conf_file, MAX_STRING_LEN, "%s/%s", CONFIG_LOAD_MODULE_PATH, DEFAULT_UNIFI_PROXY_CONFIG_FILE);
+	zabbix_log(LOG_LEVEL_DEBUG, "%s: load & parse config stage. Config file is %s", ZBX_MODULE_NAME, conf_file);
+        parse_cfg_file(conf_file, cfg, ZBX_CFG_FILE_OPTIONAL, ZBX_CFG_STRICT);
+}        					
+        					
 /******************************************************************************
  *                                                                            *
  * Function: zbx_module_init                                                  *
@@ -139,6 +196,11 @@ int	zbx_module_unifi_proxy(AGENT_REQUEST *request, AGENT_RESULT *result)
  ******************************************************************************/
 int	zbx_module_init()
 {
+	zabbix_log(LOG_LEVEL_DEBUG, "%s: init module stage", ZBX_MODULE_NAME);
+	zbx_module_load_config();
+	zbx_module_set_defaults();
+
+	zabbix_log(LOG_LEVEL_DEBUG, "%s: UniFi Proxy host is '%s:%d'", ZBX_MODULE_NAME, UNIFI_PROXY_SERVER, UNIFI_PROXY_PORT);
 	return ZBX_MODULE_OK;
 }
 
@@ -155,5 +217,6 @@ int	zbx_module_init()
  ******************************************************************************/
 int	zbx_module_uninit()
 {
+	zabbix_log(LOG_LEVEL_DEBUG, "%s: Un-init module stage", ZBX_MODULE_NAME);
 	return ZBX_MODULE_OK;
 }
