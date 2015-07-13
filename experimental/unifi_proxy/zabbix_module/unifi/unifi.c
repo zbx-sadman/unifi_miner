@@ -87,7 +87,7 @@ int	zbx_module_unifi_proxy(AGENT_REQUEST *request, AGENT_RESULT *result)
         int             ret;
         int 		i, p, np;
         zbx_sock_t	s;
-        char		send_buf[MAX_STRING_LEN]
+        char		send_buf[MAX_STRING_LEN];
 	    
         *send_buf='\0';
 
