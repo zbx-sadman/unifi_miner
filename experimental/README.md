@@ -6,7 +6,7 @@
 
 
 ### 10.07.2015
-- Miner 1.0.0 released, [Miner2](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental/unifi_proxy) (work name - UniFi Proxy) started;
+- Miner 1.0.0 released, [Miner2](https://github.com/zbx-sadman/unifi_proxy) (work name - UniFi Proxy) started;
 
 #### Notes
 
