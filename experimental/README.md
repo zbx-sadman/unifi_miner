@@ -1,34 +1,39 @@
 # Experimental place
 
+### 13.07.2015
+- Zabbix loadable module rewritten for using with Zabbix server and Zabbix Agent;
+- Miner 2 moved to his own project directory: [UniFi Proxy](https://github.com/zbx-sadman/unifi_proxy);
+
+
 ### 10.07.2015
 - Miner 1.0.0 released, [Miner2](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental/unifi_proxy) (work name - UniFi Proxy) started;
 
 #### Notes
 
-[Miner2](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental/unifi_proxy) branch based on code of Miner 1.0.0 and act as TCP server with fork support. It wait to request and response with metric value or action result. 
-All user settings placed into _unifi_proxy.conf_ file (see path inside _unifi_proxy.pl->CONFIG_FILE_DEFAULT_). Listen port defined via _unifi_proxy.conf->ListenPort_ option and the number of simultaneous connections defined via _unifi_proxy.conf->ConnLimit_.
+[Miner2](https://github.com/zbx-sadman/unifi_proxy) branch based on code of Miner 1.0.0 and act as TCP server with fork support. It wait to request and response with metric value or action result. 
+All server settings placed into _unifi_proxy.conf_ file (see path inside _unifi_proxy.pl->CONFIG_FILE_DEFAULT_). Listen port defined via _unifi_proxy.conf->ListenPort_ option and the number of simultaneous connections defined via _unifi_proxy.conf->ConnLimit_.
 
-Format of request is: _action,object_type,sitename,key,id (not mac!),username,userpass,version,cache_timeout_. Empty (skipped) value replaced with defaults.
+Format of request is: _action,object_type,sitename,key,id (or mac),username,userpass,version,cache_timeout_. Empty (skipped) value replaced with defaults.
 
 How to use:
- 1. With netcat `echo "get,uap,default,name,<id_of_uap>" | nc 127.0.0.1 7777`;
- 2. With umtcp_get (u need to compile _unifi_proxy_get.c_): `unifi_proxy_get.c 127.0.0.1 7777 "discovery,uap"`
+ 1. With netcat `echo "get,uap,default,name,<id_or_mac_of_uap>" | nc 127.0.0.1 7777`;
+ 2. With unifi_proxy_get (u need to compile utility from source code): `unifi_proxy_get.c 127.0.0.1 7777 "discovery,uap"`
  3. With Zabbix loadable module (u need to compile unifi.c and something else): use Item key (type: Zabbix agent (active)) _unifi.proxy_ as _unifi.proxy[sum,uap,default,_num-sta]_
 
 To Zabbix integration example see _unifi.conf_ file.
 
-How to compile & use Zabbix loadable module unifi.so:
+How to compile & use Zabbix loadable module _unifi.so_:
  1. Download and unpack zabbix sources (i use latest - v2.4.5);
- 2. Place _zabbix_module/unifi_ directory with all files into _.../zabbix-2.4.5/src/modules_ (near _dummy_ module dir);
+ 2. Place all files from _src/zbx_unifi_ directory to _.../zabbix-2.4.5/src/modules/unifi_ (near _dummy_ module dir);
  3. Run _.../zabbix-2.4.5/configure_ without options. Some .h files could be maked;
- 4. `cd` to  _.../zabbix-2.4.5/src/modules/unifi_ and do `make` - _unifi.so_ must be created;
- 5. `chown zabbix:zabbix unifi.so` & `mv -f ./unifi.so /usr/local/lib/zabbix` or to other dir;
+ 4. `cd  _.../zabbix-2.4.5/src/modules/unifi_ && make` - _unifi.so_ must be created;
+ 5. `chown zabbix:zabbix unifi.so && mv -f ./unifi.so /usr/local/lib/zabbix` or to other dir;
  6. Add _LoadModulePath=/usr/local/lib/zabbix_ & _LoadModule=unifi.so_ to your zabbix_agentd.conf;
  7. Restart Zabbix agent: `service zabbix-agent restart`;
  8. If _unifi_proxy.pl_ running as server, try `zabbix_agentd -t unifi.proxy[discovery,wlan,default]`;
  9. On success - use _unifi.proxy_ key with yours templates.
 
-Template example for Zabbix v2.4.5 here: [zbx_v2_4_Template_UBNT_UniFi_Proxy.xml](https://raw.githubusercontent.com/zbx-sadman/unifi_miner/master/experimental/unifi_proxy/zabbix_template/zbx_v2_4_Template_UBNT_UniFi_Proxy.xml)
+Template example for Zabbix v2.4.5 here: [zbx_v2_4_Template_UBNT_UniFi_Proxy.xml](https://github.com/zbx-sadman/unifi_proxy/tree/master/Zabbix_Templates/zbx_v2_4_Template_UBNT_UniFi_Proxy.xml)
 
 Miner2 allow to reach on my installation:
 - with netcat _real 0m0.011s_
