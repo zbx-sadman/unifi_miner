@@ -7,8 +7,8 @@ It is a small tool written in Perl, which helps deliver to the monitoring system
 ![Zabbix: connected clients](http://community.ubnt.com/t5/image/serverpage/image-id/53219iB1CA79D24EFB2BEB/image-size/original)
 
 
-If you have a question about Miner, please, read [Russian] (https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-Russian) or 
-[English](https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-on-English) (translating in progress) guide.
+If you have a question about Miner, please, read [Russian] (https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-Guide-in-Russian) or 
+[English](https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-Guide-in-English) (translating in progress) guide.
 
 If u have an problem, you can search the existing closed or open [issues](https://github.com/zbx-sadman/unifi_miner/issues). 
 
