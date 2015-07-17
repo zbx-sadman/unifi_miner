@@ -2,20 +2,18 @@
 #
 #  (C) sadman@sfi.komi.com 2015
 #  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some methods and ideas 
-#
 # 
 #
 use strict;
 use warnings;
 use Data::Dumper;
 #use Time::HiRes ('clock_gettime');
-use Getopt::Std ();
 use JSON::XS ();
 use LWP ();
 
 # uncomment for fix 'SSL23_GET_SERVER_HELLO:unknown' error
-#use IO::Socket::SSL;
-#IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => Net::SSLeay::VERIFY_NONE()));
+use IO::Socket::SSL;
+IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => Net::SSLeay::VERIFY_NONE()));
 
 use constant {
      ACT_COUNT => 'count',
@@ -31,7 +29,7 @@ use constant {
      DEBUG_MID => 2,
      DEBUG_HIGH => 3,
      KEY_ITEMS_NUM => 'items_num',
-     MINER_VERSION => '0.99999',
+     MINER_VERSION => '1.0.0',
      MSG_UNKNOWN_CONTROLLER_VERSION => 'Version of controller is unknown: ',
      OBJ_USW => 'usw',
      OBJ_USW_PORT => 'usw_port',
@@ -56,7 +54,6 @@ sub getMetric;
 sub writeStat;
 sub VERSION_MESSAGE;
 
-
 #########################################################################################################################################
 #
 #  Default values for global scope
@@ -64,13 +61,13 @@ sub VERSION_MESSAGE;
 #########################################################################################################################################
 my $globalConfig = {
    # Default action for objects metric
-   action => ACT_GET,
+   action => ACT_DISCOVERY,
    # How much time live cache data. Use 0 for disabling cache processes
    cache_timeout => 60,
    # Where are store cache file. Better place is RAM-disk
-   cache_root=> '/run/shm', 
+   cache_root=> '/dev/shm', 
    # Debug level 
-   debug => FALSE,
+   debug => 0,
    # ID of object (usually defined thru -i option)
    id => '',
    # key for count/get/sum acions
@@ -91,6 +88,8 @@ my $globalConfig = {
    password => 'stat',
    # UniFi controller version
    version => CONTROLLER_VERSION_4,
+
+   null_char => '',
    # Write statistic to _statfile_ or not
    write_stat => FALSE,
 
@@ -116,37 +115,63 @@ my $globalConfig = {
    # Sitename which replaced {'sitename'} if '-s' option not used
    default_sitename => 'default', 
    # -s option used sign
-   sitename_given => FALSE, 
-  },
+   sitename_given => FALSE 
+  };
 
-my @objJSON=(), my %options, my $res;
+  my $options,  my $ck, my $wk, my $res;
+
+foreach my $arg (@ARGV) {
+ # try to take key from arg[i]
+ ($ck) =  $arg =~ m/^-(.+)/;
+ # key is '--version' ? Set flag && do nothing inside loop
+ $options->{'version'} = TRUE, next if ($ck && ($ck eq '-version'));
+ # key is --help - do the same
+ $options->{'help'} = TRUE, next if ($ck && ($ck eq '-help'));
+ # key is defined? Init hash item
+ $options->{$ck}='' if ($ck);
+ # not defined - store value to hash item with 'key' id.
+ $options->{$wk}=$arg, next unless ($ck);
+ # remember key for next loop, where it may be used for storing value to hash
+ $wk=$ck;
+}
 
 # print the version & help with --versin & --help
-$Getopt::Std::STANDARD_HELP_VERSION=TRUE;
 
 # clock_gettime(1)=> clock_gettime(CLOCK_MONOLITIC)
 $globalConfig->{'start_time'}=clock_gettime(1) if ($globalConfig->{'write_stat'});
 
-Getopt::Std::getopts('a:c:d:i:k:l:m:n:o:p:s:u:v:', \%options);
+
+if ($options->{'version'}) {
+ print "\nUniFi Miner v", MINER_VERSION ,"\n\n";
+ exit 0;
+}
+
+if ($options->{'help'}) {
+ print "\nUniFi Miner v", MINER_VERSION;
+ print "\nSorry, but all help on https://github.com/zbx-sadman/unifi_miner\n\n";
+ exit 0;
+}
 
 # Rewrite default values by command line arguments
-$globalConfig->{'action'}        = $options{a} if defined $options{a};
-$globalConfig->{'cache_timeout'} = $options{c} if defined $options{c};
-$globalConfig->{'debug'}         = $options{d} if defined $options{d};
-$globalConfig->{'id'}            = $options{i} if defined $options{i};
-$globalConfig->{'key'}           = $options{k} if defined $options{k};
-$globalConfig->{'location'}      = $options{l} if defined $options{l};
-$globalConfig->{'mac'}           = $options{m} if defined $options{m};
-$globalConfig->{'null_char'}     = $options{n} if defined $options{n};
-$globalConfig->{'object'}        = $options{o} if defined $options{o};
-$globalConfig->{'password'}      = $options{p} if defined $options{p};
-$globalConfig->{'sitename'}      = $options{s} if defined $options{s};
-$globalConfig->{'username'}      = $options{u} if defined $options{u};
-$globalConfig->{'version'}       = $options{v} if defined $options{v};
+$globalConfig->{'action'}        = $options->{'a'} if defined ($options->{'a'});
+$globalConfig->{'cache_timeout'} = $options->{'c'} if defined ($options->{'c'});
+$globalConfig->{'debug'}         = $options->{'d'} if defined ($options->{'d'});
+$globalConfig->{'id'}            = $options->{'i'} if defined ($options->{'i'});
+$globalConfig->{'key'}           = $options->{'k'} if defined ($options->{'k'});
+$globalConfig->{'location'}      = $options->{'l'} if defined ($options->{'l'});
+$globalConfig->{'mac'}           = $options->{'m'} if defined ($options->{'m'});
+$globalConfig->{'null_char'}     = $options->{'n'} if defined ($options->{'n'});
+$globalConfig->{'object'}        = $options->{'o'} if defined ($options->{'o'});
+$globalConfig->{'password'}      = $options->{'p'} if defined ($options->{'p'});
+$globalConfig->{'sitename'}      = $options->{'s'} if defined ($options->{'s'});
+$globalConfig->{'username'}      = $options->{'u'} if defined ($options->{'u'});
+$globalConfig->{'version'}       = $options->{'v'} if defined ($options->{'v'});
+
+$globalConfig->{'sitename'}       = $options->{'s'} if defined ($options->{'s'});
 
 # -s option used -> use sitename other, that sitename='default' in *LLD() subs
-$globalConfig->{'sitename_given'}= (defined $options{s});
-$globalConfig->{'sitename'}      = $globalConfig->{'default_sitename'} unless (defined $options{s} || $globalConfig->{'sitename'});
+$globalConfig->{'sitename_given'}= (defined $options->{'s'});
+$globalConfig->{'sitename'}      = $globalConfig->{'default_sitename'} unless ($globalConfig->{'sitename'});
 
 # Set controller version specific data
 if ($globalConfig->{'version'} eq CONTROLLER_VERSION_4) {
@@ -205,33 +230,70 @@ if ($globalConfig->{'version'} eq CONTROLLER_VERSION_4) {
 print "\n[.] globalConfig:'\n\t", Dumper $globalConfig if ($globalConfig->{'debug'} >= DEBUG_MID);
 die "[!] Unknown object '$globalConfig->{'object'}' given, stop." unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'object'}}); 
 
-# First - check for object type. ...but its always defined in 'my $globalConfig {' section
-#if ($globalConfig->{'object'}) {
-   # load JSON data
-   # Ok. Type is defined. How about key?
-   if ($globalConfig->{'key'}) {
-       # Key is given - need to get metric. 
-       # if $globalConfig->{'id'} is exist then metric of this object has returned. 
-       # If not - calculate $globalConfig->{'action'} for all items in objects list (all object of type = 'object name', for example - all 'uap'
-       fetchData($globalConfig, $globalConfig->{'object'}, \@objJSON);
-       getMetric($globalConfig, \@objJSON, $globalConfig->{'key'}, $res);
-   } else { 
-       # Key is null - going generate LLD-like JSON from loaded data
-       makeLLD($globalConfig, $res);
-   }
-#}
+my $siteList;
+my $siteWalking;
+my $objList;
+my $lldPiece;
+my $val;
+
+$siteWalking=TRUE;
+#FALSE if (($givenObjType eq OBJ_USW_PORT) && ($_[0]->{'version'} eq CONTROLLER_VERSION_4) || ($_[0]->{'version'} eq CONTROLLER_VERSION_3));
+
+if ($siteWalking) { 
+   # error in fetchDataFromController - obj type taken from $[_0] - $globalObject
+   my $bakobj=$globalConfig->{'object'};
+   $globalConfig->{'object'}=OBJ_SITE;
+   fetchData($globalConfig, OBJ_SITE, $siteList);
+   $globalConfig->{'object'}=$bakobj;
+} else {
+    push (@{$siteList}, {'name' => 'default'});
+}
+
+print "\n[.]\t\t Sites list:\n\t", Dumper $siteList if ($globalConfig->{'debug'} >= DEBUG_MID);
+
+my $givenSiteName=$globalConfig->{'sitename'};
+foreach my $siteObj (@{$siteList}) {
+  # skip hidden site 'super', 0+ convert literal true/false to decimal
+  next if (defined($siteObj->{'attr_hidden'}));
+  # skip site, if '-s' option used and current site other, that given
+  next if ($globalConfig->{'sitename_given'} && ($givenSiteName ne $siteObj->{'name'}));
+  # change {'sitename'} in $globalConfig. fetchData() use that config for forming path and get right info from cache/controller 
+  $globalConfig->{'sitename'}=$siteObj->{'name'};
+  # Not nulled list causes duplicate LLD items
+  $objList=();
+  # Take objects from foreach'ed site
+  fetchData($globalConfig, $globalConfig->{'object'}, $objList);
+  # Add its info to LLD-response 
+  print "\n[.]\t\t Objects list:\n\t", Dumper $objList if ($globalConfig->{'debug'} >= DEBUG_MID);
+  if (defined($objList)) {
+     if ($globalConfig->{'action'} eq ACT_DISCOVERY) {
+        addToLLD($globalConfig, $siteObj, $objList, $lldPiece);
+     } else { 
+        if ($globalConfig->{'key'}) {
+           getMetric($globalConfig, $objList, $globalConfig->{'key'}, $val);                    
+           $res=$val, last if ($globalConfig->{'action'} eq ACT_GET);
+           $res +=$val if (defined($val));
+        } else { 
+           die "[!] Key is unknown - nothing to do, stop.";# unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'object'}}); 
+        }
+     }
+  }
+}
+
+if ($globalConfig->{'action'} eq ACT_DISCOVERY) {
+    $res->{'data'} = $lldPiece;
+    $res = JSON::XS::encode_json($res);
+}
 
 # Logout need if logging in before (in fetchData() sub) completed
-print "\n[*] Logout from UniFi controller" if ($globalConfig->{'debug'} >= DEBUG_LOW);
+print "\n[*] Logout from UniFi controller\n" if ($globalConfig->{'debug'} >= DEBUG_LOW);
 $globalConfig->{'ua'}->get($globalConfig->{'logout_path'}) if ($globalConfig->{'logged_in'});
 
 # Value could be 'null'. If need to replace null to other char - {'null_char'} must be defined
-$res = $res ? $res : $globalConfig->{'null_char'} if (defined($globalConfig->{'null_char'}));
-
-print "\n" if  ($globalConfig->{'debug'} >= DEBUG_LOW);
+$res = $globalConfig->{'null_char'} unless (defined($res));
 
 # Push result of work to stdout
-print (defined($res) ? "$res\n" : "\n");
+print "$res\n";
 
 # Write stat to file if need
 if ($globalConfig->{'write_stat'}) {
@@ -245,17 +307,6 @@ if ($globalConfig->{'write_stat'}) {
 #  Subroutines
 #
 ##################################################################################################################################
-
-sub VERSION_MESSAGE
-{
- print "UniFi Miner v", MINER_VERSION ," \n";
-}
-
-sub HELP_MESSAGE
-{
- print "Sorry, but all help on https://github.com/zbx-sadman/unifi_miner\n";
- exit 0;
-}
 
 #####################################################################################################################################
 #
@@ -422,7 +473,7 @@ sub fetchData {
    # $_[1] - object type
    # $_[2] - jsonData object ref
    print "\n[+] fetchData() started" if ($_[0]->{'debug'} >= DEBUG_LOW);
-   print "\n[>]\t args: object type: '$_[0]->{'object'}'" if ($_[0]->{'debug'} >= DEBUG_MID);
+   print "\n[>]\t args: object type: '$_[1]'" if ($_[0]->{'debug'} >= DEBUG_MID);
    print ", id: '$_[0]->{'id'}'" if ($_[0]->{'debug'} >= DEBUG_MID && $_[0]->{'id'});
    print ", mac: '$_[0]->{'mac'}'" if ($_[0]->{'debug'} >= DEBUG_MID && $_[0]->{'mac'});
    my $cacheExpire=FALSE, my $needReadCache=TRUE, my $fh, my $jsonData, my $cacheFileName, my $tmpCacheFileName, my $objID,
@@ -548,7 +599,6 @@ sub fetchDataFromController {
 
    # HTTP UserAgent init
    # Set SSL_verify_mode=off to login without certificate manipulation
-   # SSL_verify_mode => 0 eq SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE ?
    $_[0]->{'ua'} = LWP::UserAgent-> new(cookie_jar => {}, agent => "UniFi Miner/" . MINER_VERSION . " (perl engine)",
                                                             ssl_opts => {SSL_verify_mode => 0, verify_hostname => 0}) unless ($_[0]->{'ua'});
 
@@ -564,7 +614,7 @@ sub fetchDataFromController {
         die "\n[!] Login error: code $rc, stop." if ($rc eq '400');
         # v4 return 'OK' (code 200) on success login and must die only if get error
         die "\n[!] Other HTTP error: $rc, stop." if ($response->is_error);
-     } elsif ($_[0]->{'version'} eq CONTROLLER_VERSION_3) {
+     } elsif (($_[0]->{'version'} eq CONTROLLER_VERSION_3) || ($_[0]->{'version'} eq CONTROLLER_VERSION_2)) {
         # v3 return 'OK' (code 200) on wrong auth
         die "\n[!] Login error: $rc, stop." if ($response->is_success );
         # v3 return 'Redirect' (code 302) on success login and must die only if code<>302
@@ -579,7 +629,7 @@ sub fetchDataFromController {
 
 
    ################################################## Fetch data from controller  ##################################################
-
+#   print Dumper $_[0];
    if (BY_CMD == $fetchType) {
       print "\n[.]\t\t Fetch data with CMD method: '$fetchCmd'" if ($_[0]->{'debug'} >= DEBUG_MID);
       $response=$_[0]->{'ua'}->post($objPath, 'Content_type' => 'application/json', 'Content' => $fetchCmd);
@@ -699,13 +749,13 @@ sub addToLLD {
       $_[3][$o]->{'{#IP}'}       = $_[2][$i]->{'ip'}  if ($_[2][$i]->{'ip'});
       $_[3][$o]->{'{#MAC}'}      = $_[2][$i]->{'mac'} if ($_[2][$i]->{'mac'});
       # state of object: 0 - off, 1 - on
-      $_[3][$o]->{'{#STATE}'}    = $_[2][$i]->{'state'} if ($_[2][$i]->{'state'});
+      $_[3][$o]->{'{#STATE}'}    = "$_[2][$i]->{'state'}" if ($_[2][$i]->{'state'});
 
       if ($givenObjType eq OBJ_HEALTH) {
          $_[3][$o]->{'{#SUBSYSTEM}'}= $_[2][$i]->{'subsystem'};
       } elsif ($givenObjType eq OBJ_WLAN) {
          # is_guest key could be not exist with 'user' network on v3 
-         $_[3][$o]->{'{#ISGUEST}'}= 0+$_[2][$i]->{'is_guest'} if (exists($_[2][$i]->{'is_guest'}));
+         $_[3][$o]->{'{#ISGUEST}'}= "$_[2][$i]->{'is_guest'}" if (exists($_[2][$i]->{'is_guest'}));
       } elsif ($givenObjType eq OBJ_USER ) {
          $_[3][$o]->{'{#NAME}'}   = $_[2][$i]->{'hostname'};
          # sometime {hostname} may be null. UniFi controller replace that hostnames by {'mac'}
@@ -717,9 +767,9 @@ sub addToLLD {
          next if (exists($_[2][$i]->{'attr_hidden'}) && (0+$_[2][$i]->{'attr_hidden'}));
          $_[3][$o]->{'{#DESC}'}     = $_[2][$i]->{'desc'};
       } elsif ($givenObjType eq OBJ_USW_PORT) {
-         $_[3][$o]->{'{#PORTIDX}'}     = $_[2][$i]->{'port_idx'};
+         $_[3][$o]->{'{#PORTIDX}'}     = "$_[2][$i]->{'port_idx'}";
          $_[3][$o]->{'{#MEDIA}'}     = $_[2][$i]->{'media'};
-         $_[3][$o]->{'{#UP}'}     = 0+$_[2][$i]->{'up'};
+         $_[3][$o]->{'{#UP}'}     = "$_[2][$i]->{'up'}";
 #      } elsif ($givenObjType eq OBJ_UAP) {
 #         ;
 #      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
