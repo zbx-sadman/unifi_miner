@@ -10,13 +10,13 @@
     <templates>
         <template>
             <template>Template_UBNT_UniFi_Controller</template>
-            <name>Template_UBNT_UniFi_Controller</name>
-            <description>Template for UBNT UniFi Controller by sadman@sfi.komi.com&#13;
-Tested with controller v4.x, Zabbix v 2.4.&#13;
+            <name>Template_UBNT_UniFi_Controller_for_UniFi_Miner</name>
+            <description>Template for UBNT UniFi Controller (UniFi Miner edition) by sadman@sfi.komi.com&#13;
+Tested with controller v4.x, Zabbix v 2.4.5&#13;
 &#13;
 https://github.com/zbx-sadman/unifi_miner&#13;
 &#13;
-Requirements: unifi_miner.pl v &gt;= 1.0.0&#13;
+Requirements: UniFi Miner v &gt;= 1.0.0&#13;
 &#13;
 aptitude install libjson-xs-perl libwww-perl libio-socket-ssl-perl libdata-dumper-simple-perl libtime-hires-perl &#13;
 &#13;
