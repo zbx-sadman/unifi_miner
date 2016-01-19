@@ -1,8 +1,12 @@
 # Experimental place
 
+### 19.01.2015
+- [Miner 1.1.0](https://github.com/zbx-sadman/unifi_miner/blob/master/experimental/unifi_miner.pl) is testig. All features of [experimental branch of UniFi Proxy](https://github.com/zbx-sadman/unifi_proxy/tree/master/experimental) implemented to new Miner release.
+
 ### 13.07.2015
 - Zabbix loadable module rewritten for using with Zabbix server and Zabbix Agent;
 - Miner 2 moved to his own project directory: [UniFi Proxy](https://github.com/zbx-sadman/unifi_proxy);
+>>>>>>> origin/master
 
 
 ### 10.07.2015
