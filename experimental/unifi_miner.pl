@@ -94,7 +94,7 @@ sub writeStat;
 my $globalConfig = {
 
    # Where are store cache file. Better place is RAM-disk
-   'cachedir' => '/run/shm/2', 
+   'cachedir' => '/run/shm', 
    # How much time live cache data. Use 0 for disabling cache processes
    'cachemaxage' => 60,
    # Debug level 
@@ -152,7 +152,7 @@ my $globalConfig = {
 
 my $options;
 
-for (1..@ARGV) {
+for (@ARGV) {
     # try to take key from $_
     if ( m/^[-](.+)/) {
        # key is '--version' ? Set flag && do nothing inside loop

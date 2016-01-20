@@ -8,7 +8,7 @@ It is a small tool written in Perl, which helps deliver to the monitoring system
 
 
 If you have a question about Miner, please, read [Russian] (https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-Guide-in-Russian) or 
-[English](https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-in-English) guide.
+[English](https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-manual-in-English) (changes for Miner 1.1.0 in progress) guide.
 
 If u have an problem, you can search the existing closed or open [issues](https://github.com/zbx-sadman/unifi_miner/issues). 
 
