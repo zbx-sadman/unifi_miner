@@ -1,7 +1,7 @@
 ## UniFi Miner
 Actual release is v1.2.0-rc. Old releases can be found [here](https://github.com/zbx-sadman/unifi_miner/releases).
 
-hatsnew: [Russian] (https://github.com/zbx-sadman/unifi_proxy/blob/master/experimental/README.md)
+Whatsnew: [Russian] (https://github.com/zbx-sadman/unifi_proxy/blob/master/experimental/README.md)
 
 Fastest client-server version of UniFi Miner is [UniFi Proxy](https://github.com/zbx-sadman/unifi_proxy). 
 
