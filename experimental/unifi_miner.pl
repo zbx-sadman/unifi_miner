@@ -1,8 +1,9 @@
 #!/usr/bin/perl
 #
+#  UniFi Miner 1.3.0
+#
 #  (C) Grigory Prigodin 2015-2016
 #  Contact e-mail: zbx.sadman@gmail.com
-#  tanx to Jakob Borg (https://github.com/calmh/unifi-api) for some methods and ideas 
 # 
 #
 use strict;
@@ -24,14 +25,14 @@ use constant {
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
-     ACT_AVGSUM => 'avgsum',
+     ACT_AMEAN => 'amean',
      ACT_GET => 'get',
      ACT_MAX => 'max',
      ACT_MIN => 'min',
      ACT_COUNT => 'count',
      ACT_DISCOVERY => 'discovery',
-     ACT_PERCOUNT => 'percount',
-     ACT_PERSUM => 'persum',
+     ACT_PCOUNT => 'pcount',
+     ACT_PSUM => 'psum',
      ACT_SUM => 'sum',
 
      # *** Controller versions ***
@@ -68,6 +69,7 @@ use constant {
      MAX_BUFFER_LEN => 65536,
      MAX_REQUEST_LEN => 256,
      KEY_ITEMS_NUM => 'items_num',
+     KEY_ANY => '*',
      TRUE => 1,
      FALSE => 0,
      BY_CMD => 1,
@@ -88,6 +90,7 @@ sub fetchData;
 sub fetchDataFromController;
 sub getMetric;
 sub logMessage;
+sub isInArray;
 sub writeStat;
 
 
@@ -190,10 +193,10 @@ if ($options->{'help'}) {
 $globalConfig->{'start_time'}     = clock_gettime(1) if ($globalConfig->{'write_stat'});
 
 # Rewrite default values by command line arguments
-$globalConfig->{'objecttype'}     = $options->{'o'} if defined ($options->{'o'});
+$globalConfig->{'objecttype'}     = lc($options->{'o'}) if defined ($options->{'o'});
 
-$globalConfig->{'action'}         = $options->{'a'} if defined ($options->{'a'});
-$globalConfig->{'cnttailvals'}    = (ACT_PERCOUNT eq $globalConfig->{'action'} || ACT_PERSUM eq $globalConfig->{'action'}) ? TRUE : FALSE;
+$globalConfig->{'action'}         = lc($options->{'a'}) if defined ($options->{'a'});
+$globalConfig->{'cnttailvals'}    = (isInArray($globalConfig->{'action'}, (ACT_PCOUNT, ACT_PSUM))) ? TRUE : FALSE;
 $globalConfig->{'key'}            = $options->{'k'} if defined ($options->{'k'});
 # option -s not '' -> use given sitename. Otherwise use 'default'
 $globalConfig->{'sitename'}       = $options->{'s'}, $globalConfig->{'sitename_given'} = TRUE if (defined ($options->{'s'}));
@@ -205,15 +208,19 @@ $globalConfig->{'unifilocation'}  = $options->{'l'} if defined ($options->{'l'})
 $globalConfig->{'debuglevel'}     = $options->{'d'} if defined ($options->{'d'});
 $globalConfig->{'nullchar'}       = $options->{'n'} if defined ($options->{'n'});
 $globalConfig->{'key'}            = $options->{'k'} if defined ($options->{'k'});
-$globalConfig->{'mac'}            = $options->{'m'} if defined ($options->{'m'});
+$globalConfig->{'mac'}            = lc($options->{'m'}) if defined ($options->{'m'});
+
+
 if (defined($options->{'i'})) {
-   if ( uc($options->{'i'}) =~ m/^(?:[0-9A-Z]{2}[:-]){5}(:?[0-9A-Z]{2})$/ ) {
+   $options->{'i'} = lc($options->{'i'});
+   if ( $options->{'i'} =~ m/^(?:[0-9a-z]{2}[:-]){5}(:?[0-9a-z]{2})$/ ) {
       $globalConfig->{'mac'} = $options->{'i'};
    } else {
       $globalConfig->{'id'} = $options->{'i'};
       $globalConfig->{'mac'} = '';
    }
 }
+
 
 $globalConfig->{'api_path'}       = "$globalConfig->{'unifilocation'}/api";
 $globalConfig->{'login_path'}     = "$globalConfig->{'unifilocation'}/login";
@@ -246,8 +253,8 @@ if (CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
       OBJ_USERGROUP  , {'method' => BY_GET, 'path' => 'list/usergroup'},
       OBJ_WLAN       , {'method' => BY_GET, 'path' => 'list/wlanconf'},
       OBJ_SETTING    , {'method' => BY_GET, 'path' => 'get/setting'},
-      OBJ_USW_PORT_TABLE , {'method' => BY_GET, 'path' => 'stat/device', 'short_way' => TRUE},
-      OBJ_UAP_VAP_TABLE  , {'method' => BY_GET, 'path' => 'stat/device', 'short_way' => TRUE},
+      OBJ_USW_PORT_TABLE , {'parent' => OBJ_USW},
+      OBJ_UAP_VAP_TABLE  , {'parent' => OBJ_UAP},
    };
 } elsif (CONTROLLER_VERSION_3 eq $globalConfig->{'unifiversion'}) {
        $globalConfig->{'fetch_rules'} = {
@@ -267,168 +274,140 @@ if (CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
    die "[!] Version of controller is unknown: '$globalConfig->{'unifiversion'}', stop\n";
 }
 
-logMessage("[.] globalConfig:\n".(Data::Dumper::Dumper $globalConfig), DEBUG_MID) if (DEBUG_MID <= $globalConfig->{'debuglevel'});
+logMessage(DEBUG_MID, "[.] globalConfig:\n", $globalConfig);
 
 ################################################## Main action ##################################################
 # made fake site list, cuz fetchData(v2) just ignore sitename
 my $buffer, my $buferLength, my $objList, my $lldPiece, my $bytes, my $parentObj, my $objListSize;
-my $siteList = [{'name' => $globalConfig->{'sitename'}}], my $emergencyStop = FALSE;
-my $calcData = {'total' => 0, 'values' => []};
+my $siteList = [{'name' => $globalConfig->{'sitename'}}];
+my $selectingResult = {'total' => 0, 'data' => []};
 
-if ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
-
+unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
+   logMessage(DEBUG_LOW, "[!] No object type '$globalConfig->{'objecttype'}' supported");
+} else {
    # if OBJ_SITE exists in fetch_rules - siteList could be obtained for 'discovery' action or in case with undefuned sitename
    if ($globalConfig->{'fetch_rules'}->{OBJ_SITE()} && (ACT_DISCOVERY eq $globalConfig->{'action'} || !$globalConfig->{'sitename_given'}))  {
       # Clear array, because fetchData() will push data to its
-      undef $siteList;
+      $siteList = [];
       # Get site list. v3 need {'sitename'} to use into 'cmd' URI
       fetchData($globalConfig, $globalConfig->{'sitename'}, OBJ_SITE, '', $siteList);
    }
 
-   logMessage("[.]\t\t Going over all sites", DEBUG_MID);
+   logMessage(DEBUG_MID, "[.]\t\t Going over all sites");
    foreach my $siteObj (@{$siteList}) {
-      # parentObject used for transfer site (or device) info to LLD. That data used for "parent"-related macro (like {#SITENAME}, {#UAPID})
-      $parentObj = {};
       # skip hidden site 'super'
       next if (defined($siteObj->{'attr_hidden'}));
       # skip site, if '-s' option used and current site other, that given
       next if ($globalConfig->{'sitename_given'} && ($globalConfig->{'sitename'} ne $siteObj->{'name'}));
 
-      logMessage("[.]\t\t Handle site: '$siteObj->{'name'}'", DEBUG_MID);
-      undef $objList;
-      # make parent object from siteObj for made right macroses in addToLLD() sub
-      $parentObj = {'type' => OBJ_SITE, 'data' => $siteObj};
+      logMessage(DEBUG_MID, "[.]\t\t Handle site: '$siteObj->{'name'}'");
+      $objList = [];
+      # parentObject used for transfer site (or device) info to LLD. That data used for "parent"-related macro (like {#SITENAME}, {#UAPID})
       # user ask info for 'site' object. Data already loaded to $siteObj.
       if (OBJ_SITE eq $globalConfig->{'objecttype'}) {
          # Just make array from site object (which is hash) and take null for parenObj - no parent for 'site' exists
          $objList = [$siteObj], $parentObj = {'type' => ''};
       } else {
          # Take objects from foreach'ed site
-         fetchData($globalConfig, $siteObj->{'name'}, $globalConfig->{'objecttype'}, $globalConfig->{'id'}, $objList) or $buffer = "[!] No data fetched from site '$siteObj->{'name'}', stop", logMessage($buffer, DEBUG_MID), $emergencyStop = TRUE, last;
+         # Take parent of virtual object, if 'parent' property detected. Or use real object type, if not.
+         my $wrkObjType = ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}->{'parent'}) // $globalConfig->{'objecttype'};
+         # Fetch object from site
+         unless (fetchData($globalConfig, $siteObj->{'name'}, $wrkObjType, $globalConfig->{'id'}, $objList)) {
+           logMessage(DEBUG_MID, "[!] No data found for object $globalConfig->{'objecttype'} (may be wrong site name)"), next;
+         }
+         # siteObj is parent for each site item: device/user/etc
+         $parentObj = {'type' => OBJ_SITE, 'data' => $siteObj};
       }
 
-      logMessage("[.]\t\t Objects list:\n\t".(Data::Dumper::Dumper $objList), DEBUG_HIGH) if (DEBUG_HIGH <= $globalConfig->{'debuglevel'});
-      # check requested key
+      # Test "-k" option
       if (! $globalConfig->{'key'}) {
-         # No key given - user need to discovery objects. 
-         logMessage("[.]\t\t Discovering w/o key: add part of LLD", DEBUG_MID);
-         addToLLD($globalConfig, $parentObj, $objList, $lldPiece) if ($objList);
+         # No key given - user need to discovery objects?
+         if (ACT_DISCOVERY eq $globalConfig->{'action'}) {
+            logMessage(DEBUG_MID, "[.]\t\t Discovering w/o key: add part of LLD");
+            addToLLD($globalConfig, $parentObj, $objList, $selectingResult->{'data'}) if ($objList);
+         } else {
+            logMessage(DEBUG_MID, "[.]\t\t Action '$globalConfig->{'action'}' w/o key not allowed");
+         }
       } else {
          # key is defined - any action could be processed
-         logMessage("[*]\t\t Key given: $globalConfig->{'key'}", DEBUG_LOW);
-         # How much objects into list?
-         $objListSize = defined(@{$objList}) ? @{$objList} : 0;
-         logMessage("[.]\t\t Objects list size: $objListSize", DEBUG_MID);
-         # need 'discovery' action?
+         logMessage(DEBUG_LOW, "[*]\t\t Key given: $globalConfig->{'key'}");
+         # every object in site must be processeed separately to make right parentObject for key-based LLD
          if (ACT_DISCOVERY eq $globalConfig->{'action'}) {
-            logMessage("[.]\t\t Discovery with key $globalConfig->{'key'}", DEBUG_MID);
-            # Going over all object, because user can ask for key-based LLD
-            for (my $i = 0; $i < $objListSize; $i++) {
-                $_ = @{$objList}[$i];
-                logMessage("[.]\t\t Key is '$_[0]->{'key'}', check its existiense in JSON", DEBUG_MID);
-                # Given key have corresponding JSON-key?
-                if (exists($_->{$globalConfig->{'key'}})) {
-                   logMessage("[.]\t\t Corresponding JSON-key is found", DEBUG_MID);
-                   # prepare parent object
-                   $parentObj = { 'type' => $globalConfig->{'objecttype'}, 'data' => $_};
-                   # test JSON-key type
-                   if ('ARRAY' eq ref($_->{$globalConfig->{'key'}})) {
-                      # Array: use this nested array instead object
-                      $_ = $_->{$globalConfig->{'key'}};
-                      logMessage("[.]\t\t JSON-key refer to ARRAY", DEBUG_MID);
-                   } elsif ('HASH' eq ref($_->{$globalConfig->{'key'}})) {
-                      # Hash: make one-elementh array from hash
-                      $_ = [$_->{$globalConfig->{'key'}}];
-                      logMessage("[.]\t\t JSON-key refer to HASH", DEBUG_MID);
-                   } else {
-                      # Other types can't be processed with LLD, force skip adding data to LLD
-                      undef $_;
-                   } # if 'ARRAY' eq ref...
-                } else {
-                   # No JSON-key exists, force skip adding data to LLD
-                   undef $_;
-                } # if exists($_->..{'key'})
-                # Add data to LLD-response if its exists 
-                addToLLD($globalConfig, $parentObj, $_, $lldPiece) if ($_);
-            } #  for (... $i < $objListSize...)
-         }  else {  # if ACT_DISCOVERY 
-            # Other than 'discovery' action need - use getMetric() sub, which modify 'calculation data' object - grow results array, inc total, and so
-            getMetric($globalConfig, $objList, $globalConfig->{'key'}, $calcData);
+            my $wrkSelectingResult;
+            # Take every site's object
+            foreach (@{$objList}) {
+               # [re-]init temporary var
+               $wrkSelectingResult = {'total' => 0, 'data' => []};
+               # prepare parent object
+               $parentObj = { 'type' => $globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}->{'parent'}, 'data' => $_};
+               # select all elements which linked with key (key must be point to array)
+               getMetric($globalConfig, $_, $globalConfig->{'key'}, $wrkSelectingResult);
+               # Add some properties to LLD array
+               addToLLD($globalConfig, $parentObj, $wrkSelectingResult->{'data'}, $selectingResult->{'data'}) if (@{$wrkSelectingResult->{'data'}} > 0);
+            }
+         } else {
+            getMetric($globalConfig, $objList, $globalConfig->{'key'}, $selectingResult);
             # 'get' - just get data from first site's first object  in objectList and jump out from loop
             last if (ACT_GET eq $globalConfig->{'action'});
-         } # if ACT_DISCOVERY ... else 
-
+          }
      } # if (! $globalConfig->{'key'}) ...else...
    } #foreach sites
-} else {
-   $buffer="[!] No object type $globalConfig->{'objecttype'} supported",
-   $emergencyStop = TRUE,
-   logMessage($buffer, DEBUG_LOW);
-}
 
-    ################################################## Final stage of main loop  ##################################################
+   ################################################## Final stage of main loop  ##################################################
 
-# Made rounded number from result of 'percent-count', 'percent-sum' actions
-unless ($emergencyStop) {
-    # Form JSON from result for 'discovery' action
+   # Form JSON from result for 'discovery' action
     if (ACT_DISCOVERY eq $globalConfig->{'action'}) {
-       logMessage("[.] Make LLD JSON", DEBUG_MID);
-       defined($lldPiece) or logMessage("[!] No data found for object $globalConfig->{'objecttype'} (may be wrong site name), stop", DEBUG_MID);
-       # link LLD to {'data'} key
-       undef $buffer,
-       $buffer->{'data'} = $lldPiece,
+       logMessage(DEBUG_MID, "[.] Make LLD JSON");
        # make JSON
-       $buffer = $globalConfig->{'jsonxs'}->encode($buffer);
+       delete $selectingResult->{'total'};
+       $buffer = $globalConfig->{'jsonxs'}->encode($selectingResult);
     } else {
        # User want no discovery action
-       my $result = @{$calcData->{'values'}}[0];
-#       print Data::Dumper::Dumper $calcData;
-       my $totalKeysProcesseed = @{$calcData->{'values'}};
+       my $totalKeysProcesseed = @{$selectingResult->{'data'}};
        if ($totalKeysProcesseed) {
-          my $result = @{$calcData->{'values'}}[0];
+          my $result = @{$selectingResult->{'data'}}[0];
           if (ACT_GET eq $globalConfig->{'action'}) { 
              $buffer = $result;
           } else {
-             if (ACT_SUM eq $globalConfig->{'action'} || ACT_PERSUM eq $globalConfig->{'action'} || ACT_AVGSUM eq $globalConfig->{'action'}) { 
-                # sum array to $result  
+             if (ACT_SUM eq $globalConfig->{'action'} || ACT_PSUM eq $globalConfig->{'action'} || ACT_AMEAN eq $globalConfig->{'action'}) {
                 $result = 0;
-                for (my $i = 0; $i < $totalKeysProcesseed; $i++) { $result += @{$calcData->{'values'}}[$i]; }
-                if (ACT_PERSUM eq $globalConfig->{'action'}) {
-                   $result = (0 == $calcData->{'total'}) ? '0' : $result/($calcData->{'total'}/100);
-                } elsif (ACT_AVGSUM eq $globalConfig->{'action'}) { 
+                for (my $i = 0; $i < $totalKeysProcesseed; $i++) { $result += @{$selectingResult->{'data'}}[$i]; }
+                if (ACT_PSUM eq $globalConfig->{'action'}) {
+                   $result = (0 == $selectingResult->{'total'}) ? '0' : $result/($selectingResult->{'total'}/100);
+
+                } elsif (ACT_AMEAN eq $globalConfig->{'action'}) { 
                    $result = (0 == $totalKeysProcesseed) ? '0' : $result/$totalKeysProcesseed;
                 }
 
              } elsif (ACT_MAX eq $globalConfig->{'action'}) {
-                for (my $i = 0; $i < $totalKeysProcesseed; $i++) { $result = @{$calcData->{'values'}}[$i] if ($result < @{$calcData->{'values'}}[$i]); }
+                for (my $i = 0; $i < $totalKeysProcesseed; $i++) { $result = @{$selectingResult->{'data'}}[$i] if ($result < @{$selectingResult->{'data'}}[$i]); }
    
              } elsif (ACT_MIN eq $globalConfig->{'action'}) {
-                for (my $i = 0; $i < $totalKeysProcesseed; $i++) { $result = @{$calcData->{'values'}}[$i] if ($result > @{$calcData->{'values'}}[$i]); }
+                for (my $i = 0; $i < $totalKeysProcesseed; $i++) { $result = @{$selectingResult->{'data'}}[$i] if ($result > @{$selectingResult->{'data'}}[$i]); }
 
              } elsif (ACT_COUNT eq $globalConfig->{'action'}) {
                 $result = $totalKeysProcesseed;
 
-             } elsif (ACT_PERCOUNT eq $globalConfig->{'action'}) {
-                $result = (0 == $calcData->{'total'}) ? '0' : $totalKeysProcesseed/($calcData->{'total'}/100);
+             } elsif (ACT_PCOUNT eq $globalConfig->{'action'}) {
+                $result = (0 == $selectingResult->{'total'}) ? '0' : $totalKeysProcesseed/($selectingResult->{'total'}/100);
 
              } elsif (ACT_MEDIAN eq $globalConfig->{'action'}) {
-                @{$calcData->{'values'}} = sort {$a <=> $b} @{$calcData->{'values'}};
+                @{$selectingResult->{'data'}} = sort {$a <=> $b} @{$selectingResult->{'data'}};
                 my $middle = int($totalKeysProcesseed/2);
                 #odd?
                 if($totalKeysProcesseed % 2) {
-                   $result = $calcData->{'values'}[$middle];
+                   $result = $selectingResult->{'data'}[$middle];
                 } else {
                    #even
-                   $result = ($calcData->{'values'}[$middle-1] + $calcData->{'values'}[$middle])/2;
+                   $result = ($selectingResult->{'data'}[$middle-1] + $selectingResult->{'data'}[$middle])/2;
                 }
             }
-            $buffer = sprintf("%.".ROUND_NUMBER."f", $result); 
+            # round to .xxx only if action is ACT_AMEAN || ACT_PCOUNT || ACT_PSUM || ACT_MEDIAN
+            $buffer = sprintf("%.".(isInArray($globalConfig->{'action'}, (ACT_AMEAN, ACT_PCOUNT, ACT_PSUM, ACT_MEDIAN)) ? ROUND_NUMBER : 0)."f", $result); 
          } # if (ACT_GET eq $globalConfig->{'action'}) ...else...
-#         if (! defined($result)) {print Data::Dumper::Dumper $calcData;}
       } # if ($totalKeysProcesseed)
-
    } # if (ACT_DISCOVERY eq $globalConfig->{'action'}) ...else...
-} # unless ($emergencyStop)
+} # unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) ...else...
 
 
 # Value could be null-type (undef in Perl). If need to replace null to other char - {'nullchar'} must be defined. On default $globalConfig->{'nullchar'} is ''
@@ -441,7 +420,7 @@ if ( MAX_BUFFER_LEN <= $buferLength) {
 }
 
 # Logout need if logging in before (in fetchData() sub) completed
-logMessage("[*] Logout from UniFi controller", DEBUG_LOW), $globalConfig->{'ua'}->get($globalConfig->{'logout_path'}) if (defined($globalConfig->{'ua'}));
+logMessage(DEBUG_LOW, "[*] Logout from UniFi controller"), $globalConfig->{'ua'}->get($globalConfig->{'logout_path'}) if (defined($globalConfig->{'ua'}));
 
 # Push result of work to stdout
 $buffer .= "\n", $buferLength++, print $buffer;
@@ -461,9 +440,21 @@ if ($globalConfig->{'write_stat'}) {
 ##################################################################################################################################
 sub logMessage
   {
-    return unless ($globalConfig->{'debuglevel'} >= $_[1]);
-    print "[$$] ", POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime(time())), " $_[0]\n";
+    return unless ($globalConfig->{'debuglevel'} >= $_[0]);
+    print "[$$] ", POSIX::strftime("%Y-%m-%d %H:%M:%S", localtime(time())), " ";
+    for (my $i = 1; $i < @_; $i++) {
+        print (('ARRAY' eq ref($_[$i]) || ('HASH' eq ref($_[$i]))) ? Data::Dumper::Dumper $_[$i] : $_[$i]);
+    }
+    print "\n";
   }
+
+sub isInArray {
+    for (my $i = 1; $i < @_; $i++) {
+        return 1 if ($_[0] eq $_[$i]);
+    }
+    return 0;
+}
+
 #####################################################################################################################################
 #
 #  Write statistic to file. Fields separated by commas.
@@ -486,15 +477,24 @@ sub getMetric {
     my $currentRoot = $_[1], my $state = ST_SAVE, my $stack, my $arrIdx, my $arrSize, my $keyPos = -1, my $nFilters = 0, my $stackPos = -1, my $allValues = 0,
     my $keepKeyPos = FALSE, my $filterPassed = 0, my $isLastFilter = FALSE, my $actCurrentValue, my $i, my $processedKeysNum = 0;
   
-    logMessage("[+] getMetric() started", DEBUG_LOW);
-    logMessage("[>]\t args: key: '$_[2]', action: '$_[0]->{'action'}'", DEBUG_LOW);
-    logMessage("[>]\t incoming object info:'\n\t".(Data::Dumper::Dumper $_[1]), DEBUG_HIGH) if (DEBUG_HIGH <= $_[0]->{'debuglevel'});
+    logMessage(DEBUG_LOW, "[+] getMetric() started");
+    logMessage(DEBUG_LOW, "[>]\t args: key: '$_[2]', action: '$_[0]->{'action'}'");
+    logMessage(DEBUG_HIGH, "[>]\t incoming object info:'\n\t", $_[1]);
     
     # split key to parts for analyze
     my @keyParts = split (/[.]/, $_[2]);
     #print Dumper @keyParts;
 
     # do analyzing, put subkeys to array, processing filter expressions
+    # keyParts array:
+    # {'l'} = & for AND 
+    #         | for OR
+    #         undef for non-logic expression
+    # {'e'} - expression array if {'l'} defined
+    #       {'k'} - key
+    #       {'s'} - equation sign
+    #       {'v'} - value
+    # {'e'} - JSON-key name if {'l'} is undef
     for ($i = 0; $i < @keyParts; $i++) {
         my $swap = $keyParts[$i];
         undef $keyParts[$i];
@@ -517,8 +517,6 @@ sub getMetric {
            $keyParts[$i] = {'e' => $swap, 'l' => undef};
         }
     }
-#    print Data::Dumper::Dumper @keyParts;
-
     # Some special actions is processed
 
    ###########################################     Main loop    ###########################################################
@@ -582,7 +580,7 @@ sub getMetric {
            # if user want to know how much items contained in subarray - just read array size from stack's item and return immediatly
            if (KEY_ITEMS_NUM eq $keyParts[$keyPos]->{'e'}) {
               # [$stackPos-1] when key is '...json_hash.items_num'
-              $_ = @{@{$stack}[$stackPos-1]}[2], $_[3]->{'total'} += $_, push(@{$_[3]->{'values'}}, $_), last;
+              $_ = @{@{$stack}[$stackPos-1]}[2], $_[3]->{'total'} += $_, push(@{$_[3]->{'data'}}, $_), last;
            }
 
            # Do filter tests with this item
@@ -615,7 +613,6 @@ sub getMetric {
               }
 
               # part of key was filter expression and object is matched
-#              if (defined($keyParts[$keyPos]->{'l'}) && $matchCount == @{$fData}) {
               if ($matchCount == @{$fData}) {
                  # Object is good - just skip filter expression and work
                  $filterPassed++;
@@ -642,6 +639,7 @@ sub getMetric {
            # end of filter work part
 
            # hash with name equal key part is reached from current root with one hop?
+           # ToDo: (... ||  KEY_ANY eq $keyParts[$keyPos]->{'e'}) for 'part.subpart.[filter].*' keys
            if (exists($currentRoot->{$keyParts[$keyPos]->{'e'}})) {
               # Yes, hash item found
               # Key is point to final subkey or we can dive more?
@@ -651,16 +649,25 @@ sub getMetric {
                  # current value allowed to action when all filters passed
                  $actCurrentValue  = (($nFilters - $filterPassed) == 0) ? TRUE : FALSE;
                  # do action
-                 push(@{$_[3]->{'values'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}}) if ($actCurrentValue);
-                 if (ACT_GET eq $_[0]->{'action'}) {
-                    # just exit from search loop
-                    last if ($actCurrentValue);
-                 } elsif (ACT_PERSUM eq $_[0]->{'action'})    {
-                    # SUM values
-                    $_[3]->{'total'} += $currentRoot->{$keyParts[$keyPos]->{'e'}};
+                 if ('ARRAY' eq ref($currentRoot->{$keyParts[$keyPos]->{'e'}})) {
+                    # sub pointed to ARRAY. Push it as array of hashes to result with 'discovery' action
+                    push(@{$_[3]->{'data'}}, @{$currentRoot->{$keyParts[$keyPos]->{'e'}}}) if ($actCurrentValue && (ACT_DISCOVERY eq $_[0]->{'action'}));
+                 } elsif ('HASH' eq ref($currentRoot->{$keyParts[$keyPos]->{'e'}})) {
+                    # sub pointed to HASH. Push it as single hash to result with 'discovery' action
+                    push(@{$_[3]->{'data'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}})    if ($actCurrentValue && (ACT_DISCOVERY eq $_[0]->{'action'}));
                  } else {
-                    # COUNT all values (matched and not matched)
-                    $_[3]->{'total'}++;
+                    # sub pointed to property. Its can be counted or summed without programm exception
+                    push(@{$_[3]->{'data'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}})    if ($actCurrentValue && (ACT_DISCOVERY ne $_[0]->{'action'}));
+                    # just exit from search loop
+                    last if ($actCurrentValue && ACT_GET eq $_[0]->{'action'});
+                    # all values must be counted while PER* actions proceseed 
+                    if (ACT_PSUM eq $_[0]->{'action'})    {
+                       # SUM values
+                       $_[3]->{'total'} += $currentRoot->{$keyParts[$keyPos]->{'e'}};
+                    } else {
+                       # COUNT all values (matched and not matched)
+                       $_[3]->{'total'}++;
+                    }
                  }
                  # Final subkey detected. Go closer to JSON root.
                  $state = ST_REST; next;
@@ -677,8 +684,8 @@ sub getMetric {
  }
     ###########################################    End of main loop    ###########################################################
 
- logMessage("[<] result: ($_[3])", DEBUG_LOW) if (defined($_[3]));
- logMessage("[-] getMetric() finished ", DEBUG_LOW);
+ logMessage(DEBUG_HIGH, "[<]\t result:'\n\t", $_[3]);
+ logMessage(DEBUG_LOW, "[-] getMetric() finished ");
  return TRUE;
 
 }
@@ -694,24 +701,26 @@ sub fetchData {
    # $_[2] - object type
    # $_[3] - obj id
    # $_[4] - jsonData object ref
-   logMessage("[+] fetchData() started", DEBUG_LOW);
-   logMessage("[>]\t args: object type: '$_[0]->{'objecttype'}'", DEBUG_MID);
-   logMessage("[>]\t id: '$_[3]'", DEBUG_MID) if ($_[3]);
-   logMessage("[>]\t mac: '$_[0]->{'mac'}'", DEBUG_MID) if ($_[0]->{'mac'});
-   my ($fh, $jsonData, $objPath),
+   logMessage(DEBUG_LOW, "[+] fetchData() started");
+   logMessage(DEBUG_MID, "[>]\t args: object type: '$_[2]'");
+   logMessage(DEBUG_MID, "[>]\t id: '$_[3]'") if ($_[3]);
+   logMessage(DEBUG_MID, "[>]\t mac: '$_[0]->{'mac'}'") if ($_[0]->{'mac'});
+   my $fh, my $jsonData, my $objPath, my $useShortWay = FALSE,
    my $needReadCache = TRUE;
 
    $objPath  = $_[0]->{'api_path'} . ($_[0]->{'fetch_rules'}->{$_[2]}->{'excl_sitename'} ? '' : "/s/$_[1]") . "/$_[0]->{'fetch_rules'}->{$_[2]}->{'path'}";
    # if MAC is given with command-line option -  RapidWay for Controller v4 is allowed, short_way is tested for non-device objects workaround
-   $objPath .= "/$_[0]->{'mac'}" if ($_[0]->{'fetch_rules'}->{$_[2]}->{'short_way'} && $_[0]->{'mac'});
-   logMessage("[.]\t\t Object path: '$objPath'", DEBUG_MID);
+   if ($_[0]->{'fetch_rules'}->{$_[2]}->{'short_way'} && $_[0]->{'mac'}) {
+      $objPath .= "/$_[0]->{'mac'}", $useShortWay = TRUE;
+   }
+   logMessage(DEBUG_MID, "[.]\t\t Object path: '$objPath'");
 
    ################################################## Take JSON  ##################################################
 
    # If CacheMaxAge = 0 - do not try to read/update cache - fetch data from controller
    if (0 == $_[0]->{'cachemaxage'}) {
-      logMessage("[.]\t\t No read/update cache because CacheMaxAge = 0", DEBUG_MID);
-      fetchDataFromController($_[0], $objPath, $jsonData) or logMessage("[!] Can't fetch data from controller, stop", DEBUG_LOW), return FALSE;
+      logMessage(DEBUG_MID, "[.]\t\t No read/update cache because CacheMaxAge = 0");
+      fetchDataFromController($_[0], $_[2], $objPath, $jsonData, $useShortWay) or logMessage(DEBUG_LOW, "[!] Can't fetch data from controller"), return FALSE;
    } else {
       # Change all [:/.] to _ to make correct filename
       my $cacheFileName;
@@ -719,27 +728,27 @@ sub fetchData {
       $cacheFileName = $_[0]->{'cachedir'} .'/'. $cacheFileName;
       my $cacheFileMTime = (stat($cacheFileName))[9];
       # cache file unexist (mtime is undef) or regular?
-      ($cacheFileMTime && (!-f $cacheFileName)) and logMessage("[!] Can't handle '$cacheFileName' through its not regular file, stop.", DEBUG_LOW), return FALSE;
+      ($cacheFileMTime && (!-f $cacheFileName)) and logMessage(DEBUG_LOW, "[!] Can't handle '$cacheFileName' through its not regular file"), return FALSE;
       # cache is expired if: unexist (mtime is undefined) OR (file exist (mtime is defined) AND its have old age) 
       #                                                   OR have Zero size (opened, but not filled or closed with error)
       my $cacheExpire=(((! defined($cacheFileMTime)) || defined($cacheFileMTime) && (($cacheFileMTime+$_[0]->{'cachemaxage'}) < time())) ||  -z $cacheFileName) ;
 
       if ($cacheExpire) {
          # Cache expire - need to update
-         logMessage("[.]\t\t Cache expire or not found. Renew...", DEBUG_MID);
+         logMessage(DEBUG_MID, "[.]\t\t Cache expire or not found. Renew...");
          my $tmpCacheFileName = $cacheFileName . ".tmp";
          # Temporary cache filename point to non regular file? If so - die to avoid problem with write or link/unlink operations
          # $_ not work
-         ((-e $tmpCacheFileName) && (!-f $tmpCacheFileName)) and logMessage("[!] Can't handle '$tmpCacheFileName' through its not regular file, stop.", DEBUG_LOW), return FALSE;
-         logMessage("[.]\t\t Temporary cache file='$tmpCacheFileName'", DEBUG_MID);
-         open ($fh, ">", $tmpCacheFileName) or logMessage("[!] Can't open '$tmpCacheFileName' ($!), stop.", DEBUG_LOW), return FALSE;
+         ((-e $tmpCacheFileName) && (!-f $tmpCacheFileName)) and logMessage(DEBUG_LOW, "[!] Can't handle '$tmpCacheFileName' through its not regular file"), return FALSE;
+         logMessage(DEBUG_MID, "[.]\t\t Temporary cache file='$tmpCacheFileName'");
+         open ($fh, ">", $tmpCacheFileName) or logMessage(DEBUG_LOW, "[!] Can't open '$tmpCacheFileName' ($!)"), return FALSE;
          # try to lock temporary cache file and no wait for able locking.
          # LOCK_EX | LOCK_NB
          if (flock ($fh, 2 | 4)) {
             # if Proxy could lock temporary file, it...
             chmod (0666, $fh);
             # ...fetch new data from controller...
-            fetchDataFromController($_[0], $objPath, $jsonData) or logMessage("[!] Can't fetch data from controller, stop", DEBUG_LOW), close ($fh), return FALSE;
+            fetchDataFromController($_[0], $_[2], $objPath, $jsonData, $useShortWay) or logMessage(DEBUG_LOW, "[!] Can't fetch data from controller"), close ($fh), return FALSE;
             # unbuffered write it to temp file..
             syswrite ($fh, $_[0]->{'jsonxs'}->encode($jsonData));
             # Now unlink old cache filedata from cache filename 
@@ -747,26 +756,26 @@ sub fetchData {
             unlink ($cacheFileName);
             # Link name of cache file to temp file. File will be have two link - to cache and to temporary cache filenames. 
             # New run down processes can get access to data by cache filename
-            link($tmpCacheFileName, $cacheFileName) or logMessage("[!] Presumably no rights to unlink '$cacheFileName' file ($!). Try to delete it ", DEBUG_LOW), return FALSE;
+            link($tmpCacheFileName, $cacheFileName) or logMessage(DEBUG_LOW, "[!] Presumably no rights to unlink '$cacheFileName' file ($!). Try to delete it "), return FALSE;
             # Unlink temp filename from file. 
             # Process, that open temporary cache file can do something with filedata while file not closed
-            unlink($tmpCacheFileName) or logMessage("[!] '$tmpCacheFileName' unlink error ($!), stop", DEBUG_LOW), return FALSE;
+            unlink($tmpCacheFileName) or logMessage(DEBUG_LOW, "[!] '$tmpCacheFileName' unlink error ($!)"), return FALSE;
             # Close temporary file. close() unlock filehandle.
-            #close($fh) or logMessage("[!] Can't close locked temporary cache file '$tmpCacheFileName' ($!), stop", DEBUG_LOW), return FALSE; 
+            #close($fh) or logMessage(DEBUG_LOW, "[!] Can't close locked temporary cache file '$tmpCacheFileName' ($!)"), return FALSE; 
             # No cache read from file need
            $needReadCache=FALSE;
         } 
-        close ($fh) or logMessage("[!] Can't close temporary cache file '$tmpCacheFileName' ($!), stop", DEBUG_LOW), return FALSE;
+        close ($fh) or logMessage(DEBUG_LOW, "[!] Can't close temporary cache file '$tmpCacheFileName' ($!)"), return FALSE;
       } # if ($cacheExpire)
 
       # if need load data from cache file
       if ($needReadCache) {
        # open file
-       open($fh, "<:mmap", $cacheFileName) or logMessage("[!] Can't open '$cacheFileName' ($!), stop.", DEBUG_LOW), return FALSE;
+       open($fh, "<:mmap", $cacheFileName) or logMessage(DEBUG_LOW, "[!] Can't open '$cacheFileName' ($!)"), return FALSE;
        # read data from file
        $jsonData=$_[0]->{'jsonxs'}->decode(<$fh>);
        # close cache
-       close($fh) or logMessage( "[!] Can't close cache file ($!), stop.", DEBUG_LOW), return FALSE;
+       close($fh) or logMessage(DEBUG_LOW, "[!] Can't close cache file ($!)"), return FALSE;
     }
   } # if (0 == $_[0]->{'cachemaxage'})
 
@@ -780,7 +789,6 @@ sub fetchData {
      # Object have ID...
      if ($_[3]) {
        #  ...and its required object? If so push - object to global @objJSON and jump out from the loop.
-#       print "id: @{$jsonData}[$i]->{$idKey} \n";
        $_[4][0] = @{$jsonData}[$i], last if (@{$jsonData}[$i]->{$idKey} eq $_[3]);
      } else {
        # otherwise
@@ -788,8 +796,8 @@ sub fetchData {
      }
    } # for each jsonData
 
-   logMessage("[<]\t Fetched data:\n\t".(Data::Dumper::Dumper $_[4]), DEBUG_HIGH) if (DEBUG_HIGH <= $_[0]->{'debuglevel'});
-   logMessage("[-] fetchData() finished", DEBUG_LOW);
+   logMessage(DEBUG_HIGH, "[<]\t Fetched data:\n\t", $_[4]);
+   logMessage(DEBUG_LOW, "[-] fetchData() finished");
    return TRUE;
 }
 
@@ -800,13 +808,15 @@ sub fetchData {
 #*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/
 sub fetchDataFromController {
    # $_[0] - GlobalConfig
-   # $_[1] - object path
-   # $_[2] - jsonData object ref
-   my $response, my $fetchType = $_[0]->{'fetch_rules'}->{$_[0]->{'objecttype'}}->{'method'},
-   my $fetchCmd = $_[0]->{'fetch_rules'}->{$_[0]->{'objecttype'}}->{'cmd'}, my $errorCode;
+   # $_[1] - object type
+   # $_[2] - object path
+   # $_[3] - jsonData object ref
+   # $_[4] - used "short way" request
 
-   logMessage("[+] fetchDataFromController() started", DEBUG_LOW);
-   logMessage("[>]\t args: object path: '$_[1]'", DEBUG_LOW);
+   my $response, my $fetchType = $_[0]->{'fetch_rules'}->{$_[1]}->{'method'}, my $fetchCmd = $_[0]->{'fetch_rules'}->{$_[1]}->{'cmd'}, my $errorCode;
+
+   logMessage(DEBUG_LOW, "[+] fetchDataFromController() started");
+   logMessage(DEBUG_LOW, "[>]\t args: object path: '$_[2]'");
 
    # HTTP UserAgent init
    # Set SSL_verify_mode=off to login without certificate manipulation
@@ -822,46 +832,52 @@ sub fetchDataFromController {
    # not logged?
    if ('401' eq $response->code) {
         # logging in
-        logMessage("[.]\t\tTry to log in into controller...", DEBUG_LOW);
+        logMessage(DEBUG_LOW, "[.]\t\tTry to log in into controller...");
         $response = $_[0]->{'ua'}->post($_[0]->{'login_path'}, 'Content_type' => $_[0]->{'content_type'}, 'Content' => $_[0]->{'login_data'});
-        logMessage("[>>]\t\t HTTP respose:\n\t".(Data::Dumper::Dumper $response), DEBUG_HIGH) if (DEBUG_HIGH <= $_[0]->{'debuglevel'});
-        $errorCode=$response->is_error;
+        logMessage(DEBUG_HIGH, "[>>]\t\t HTTP respose:\n\t", $response);
+        $errorCode = $response->is_error;
         if (CONTROLLER_VERSION_4 eq $_[0]->{'unifiversion'}) {
            # v4 return 'Bad request' (code 400) on wrong auth
            # v4 return 'OK' (code 200) on success login
-           ('400' eq $response->code) and $errorCode=FETCH_LOGIN_ERROR;
+           ('400' eq $response->code) and $errorCode = FETCH_LOGIN_ERROR;
         } elsif ( CONTROLLER_VERSION_3 eq ($_[0]->{'unifiversion'}) || (CONTROLLER_VERSION_2 eq $_[0]->{'unifiversion'})) {
            # v3 return 'OK' (code 200) on wrong auth
-           ('200' eq $response->code) and $errorCode=FETCH_LOGIN_ERROR;
+           ('200' eq $response->code) and $errorCode = FETCH_LOGIN_ERROR;
            # v3 return 'Redirect' (code 302) on success login and must die only if code<>302
-           ('302' eq $response->code) and $errorCode=FETCH_NO_ERROR;
+           ('302' eq $response->code) and $errorCode = FETCH_NO_ERROR;
         }
     }
-    ($errorCode == FETCH_LOGIN_ERROR) and logMessage("[!] Login error - wrong auth data, stop", DEBUG_LOW), return FALSE;
-    ($errorCode == FETCH_OTHER_ERROR) and logMessage("[!] Comminication error: '($response->status_line)', stop.\n", DEBUG_LOW), return FALSE;
 
-    logMessage("[.]\t\tLogin successfull", DEBUG_LOW);
+    (FETCH_LOGIN_ERROR == $errorCode) and logMessage(DEBUG_LOW, "[!] Login error - wrong auth data"), return FALSE;
+    (FETCH_OTHER_ERROR == $errorCode) and logMessage(DEBUG_LOW, "[!] Comminication error: '", ($response->status_line), "'\n"), return FALSE;
+
+    logMessage(DEBUG_LOW, "[.]\t\tLogin successfull");
 
    ################################################## Fetch data from controller  ##################################################
 
    if (BY_CMD == $fetchType) {
-      logMessage("[.]\t\t Fetch data with CMD method: '$fetchCmd'", DEBUG_MID);
-      $response = $_[0]->{'ua'}->post($_[1], 'Content_type' => $_[0]->{'content_type'}, 'Content' => $fetchCmd);
+      logMessage(DEBUG_MID, "[.]\t\t Fetch data with CMD method: '$fetchCmd'");
+      $response = $_[0]->{'ua'}->post($_[2], 'Content_type' => $_[0]->{'content_type'}, 'Content' => $fetchCmd);
    } else { #(BY_GET == $fetchType)
-      logMessage("[.]\t\t Fetch data with GET method from: '$_[1]'", DEBUG_MID);
-      $response = $_[0]->{'ua'}->get($_[1]);
+      logMessage(DEBUG_MID, "[.]\t\t Fetch data with GET method from: '$_[1]'");
+      $response = $_[0]->{'ua'}->get($_[2]);
    }
 
-   ($response->is_error == FETCH_OTHER_ERROR) and logMessage("[!] Comminication error while fetch data from controller: '($response->status_line)', stop.\n", DEBUG_LOW), return FALSE;
+   # '400 Bad Request' is returned with 'no device' case & v4's "short way" request used
+   if (('400' eq $response->code) && $_[4]) {
+      logMessage(DEBUG_MID, "[.] Comminication error while fetch data from v4 controller via shortway. No specified device exist in this site");
+   } else {
+     ($response->is_error == FETCH_OTHER_ERROR) and logMessage(DEBUG_LOW, "[!] Comminication error while fetch data from controller: '", $response->status_line ,"'\n"), return FALSE;
+   }
 
-   logMessage("[>>]\t\t Fetched data:\n\t".(Data::Dumper::Dumper $response->decoded_content), DEBUG_HIGH) if (DEBUG_HIGH <= $_[0]->{'debuglevel'});;
-   $_[2] = $_[0]->{'jsonxs'}->decode(${$response->content_ref()});
+   logMessage(DEBUG_HIGH, "[>>]\t\t Fetched data:\n\t", $response->decoded_content);
+   $_[3] = $_[0]->{'jsonxs'}->decode(${$response->content_ref()});
 
 
    # server answer is ok ?
-   (($_[2]->{'meta'}->{'rc'} ne 'ok') && (defined($_[2]->{'meta'}->{'msg'}))) and  logMessage("[!] UniFi controller reply is not OK: '$_[2]->{'meta'}->{'msg'}', stop.", DEBUG_LOW);
-   $_[2] = $_[2]->{'data'};
-   logMessage("[<]\t decoded data:\n\t".(Data::Dumper::Dumper $_[2]), DEBUG_HIGH) if (DEBUG_HIGH <= $_[0]->{'debuglevel'});
+   (($_[3]->{'meta'}->{'rc'} ne 'ok') && (defined($_[3]->{'meta'}->{'msg'}))) and logMessage(DEBUG_LOW, "[!] UniFi controller reply is not OK: '$_[3]->{'meta'}->{'msg'}'");
+   $_[3] = $_[3]->{'data'};
+   logMessage(DEBUG_HIGH, "[<]\t decoded data:\n\t", $_[3]);
    $_[0]->{'downloaded'}=TRUE;
    return TRUE;
 }
@@ -878,12 +894,12 @@ sub addToLLD {
     # $_[3] - Outgoing objects list
 
     # remap object type: add key to type for right select and add macroses
-    my $givenObjType  = $_[0]->{'objecttype'}.($_[0]->{'key'} ? "_$_[0]->{'key'}" : '');
+    my $givenObjType  = $_[0]->{'objecttype'}.($_[0]->{'key'} ? "_$_[0]->{'key'}" : ''),
     my $parentObjType = $_[1]->{'type'}, my $parentObjData;
     $parentObjData = $_[1]->{'data'} if (defined($_[1]));
 
-    logMessage("[+] addToLLD() started", DEBUG_LOW); logMessage("[>]\t args: object type: '$_[0]->{'objecttype'}'", DEBUG_MID); 
-    logMessage("[>]\t Site name: '$_[1]->{'name'}'", DEBUG_MID) if ($_[1]->{'name'});
+    logMessage(DEBUG_LOW, "[+] addToLLD() started"), logMessage(DEBUG_MID, "[>]\t args: object type: '$_[0]->{'objecttype'}'"); 
+    logMessage(DEBUG_MID, "[>]\t Site name: '$_[1]->{'name'}'") if ($_[1]->{'name'});
     # $o - outgoing object's array element pointer, init as length of that array to append elements to the end
     my $o = $_[3] ? @{$_[3]} : 0;
     for (@{$_[2]}) {
@@ -894,17 +910,17 @@ sub addToLLD {
       if (defined($_[1])) {
          # analyze parent & add some fields
          if (OBJ_SITE eq $parentObjType) {
-            $_[3][$o]->{'{#SITEID}'}    = "$parentObjData->{'_id'}";
+            $_[3][$o]->{'{#SITEID}'}    = "$parentObjData->{'_id'}",
             $_[3][$o]->{'{#SITENAME}'}  = "$parentObjData->{'name'}";
             # In v3 'desc' key is not exist, and site desc == name
             $_[3][$o]->{'{#SITEDESC}'}  = $parentObjData->{'desc'} ? "$parentObjData->{'desc'}" : "$parentObjData->{'name'}";
          } elsif (OBJ_USW eq $parentObjType) {
-            $_[3][$o]->{'{#USWID}'}     = "$parentObjData->{'_id'}";
-            $_[3][$o]->{'{#USWNAME}'}   = "$parentObjData->{'name'}";
+            $_[3][$o]->{'{#USWID}'}     = "$parentObjData->{'_id'}",
+            $_[3][$o]->{'{#USWNAME}'}   = "$parentObjData->{'name'}",
             $_[3][$o]->{'{#USWMAC}'}    = "$parentObjData->{'mac'}";
          } elsif (OBJ_UAP eq $parentObjType) {
-            $_[3][$o]->{'{#UAPID}'}     = "$parentObjData->{'_id'}";
-            $_[3][$o]->{'{#UAPNAME}'}   = "$parentObjData->{'name'}";
+            $_[3][$o]->{'{#UAPID}'}     = "$parentObjData->{'_id'}",
+            $_[3][$o]->{'{#UAPNAME}'}   = "$parentObjData->{'name'}",
             $_[3][$o]->{'{#UAPMAC}'}    = "$parentObjData->{'mac'}";
          }
       }
@@ -914,7 +930,6 @@ sub addToLLD {
       $_[3][$o]->{'{#ID}'}           = "$_->{'_id'}"      if (exists($_->{'_id'}));
       $_[3][$o]->{'{#IP}'}           = "$_->{'ip'}"       if (exists($_->{'ip'}));
       $_[3][$o]->{'{#MAC}'}          = "$_->{'mac'}"      if (exists($_->{'mac'}));
-      # state of object: 0 - off, 1 - on
       $_[3][$o]->{'{#STATE}'}        = "$_->{'state'}"    if (exists($_->{'state'}));
       $_[3][$o]->{'{#ADOPTED}'}      = "$_->{'adopted'}"  if (exists($_->{'adopted'}));
 
@@ -924,7 +939,7 @@ sub addToLLD {
          $_[3][$o]->{'{#ISGUEST}'}   = "$_->{'is_guest'}" if (exists($_->{'is_guest'}));
       } elsif (OBJ_USER eq $givenObjType || OBJ_ALLUSER eq $givenObjType) {
          # sometime {hostname} may be null. UniFi controller replace that hostnames by {'mac'}
-         $_[3][$o]->{'{#NAME}'}      = $_->{'hostname'} ? "$_->{'hostname'}" : "$_->{'mac'}";
+         $_[3][$o]->{'{#NAME}'}      = $_->{'hostname'} ? "$_->{'hostname'}" : "$_->{'mac'}",
          $_[3][$o]->{'{#OUI}'}       = "$_->{'oui'}";
       } elsif (OBJ_UPH eq $givenObjType) {
          $_[3][$o]->{'{#ID}'}        = "$_->{'device_id'}";
@@ -932,21 +947,21 @@ sub addToLLD {
          # In v3 'desc' key is not exist, and site desc == name
          $_[3][$o]->{'{#DESC}'} = $_->{'desc'} ? "$_->{'desc'}" : "$_->{'name'}";
       } elsif (OBJ_UAP_VAP_TABLE eq $givenObjType) {
-         $_[3][$o]->{'{#UP}'}        = "$_->{'up'}";
-         $_[3][$o]->{'{#USAGE}'}     = "$_->{'usage'}";
-         $_[3][$o]->{'{#RADIO}'}     = "$_->{'radio'}";
-         $_[3][$o]->{'{#ISWEP}'}     = "$_->{'is_wep'}";
+         $_[3][$o]->{'{#UP}'}        = "$_->{'up'}",
+         $_[3][$o]->{'{#USAGE}'}     = "$_->{'usage'}",
+         $_[3][$o]->{'{#RADIO}'}     = "$_->{'radio'}",
+         $_[3][$o]->{'{#ISWEP}'}     = "$_->{'is_wep'}",
          $_[3][$o]->{'{#ISGUEST}'}   = "$_->{'is_guest'}";
       } elsif (OBJ_USW_PORT_TABLE eq $givenObjType) {
-         $_[3][$o]->{'{#PORTIDX}'}   = "$_->{'port_idx'}";
-         $_[3][$o]->{'{#MEDIA}'}     = "$_->{'media'}";
-         $_[3][$o]->{'{#UP}'}        = "$_->{'up'}";
+         $_[3][$o]->{'{#PORTIDX}'}   = "$_->{'port_idx'}",
+         $_[3][$o]->{'{#MEDIA}'}     = "$_->{'media'}",
+         $_[3][$o]->{'{#UP}'}        = "$_->{'up'}",
          $_[3][$o]->{'{#PORTPOE}'}   = "$_->{'port_poe'}";
       } elsif (OBJ_HEALTH eq $givenObjType) {
-         $_[3][$o]->{'{#SUBSYSTEM}'} = $_->{'subsystem'};
+         $_[3][$o]->{'{#SUBSYSTEM}'} = $_->{'subsystem'},
          $_[3][$o]->{'{#STATUS}'}    = $_->{'status'};
       } elsif (OBJ_NETWORK eq $givenObjType) {
-         $_[3][$o]->{'{#PURPOSE}'} = $_->{'purpose'};
+         $_[3][$o]->{'{#PURPOSE}'} = $_->{'purpose'},
          $_[3][$o]->{'{#NETWORKGROUP}'} = $_->{'networkgroup'};
       } elsif (OBJ_EXTENSION eq $givenObjType) {
          $_[3][$o]->{'{#EXTENSION}'} = $_->{'extension'};
@@ -961,16 +976,16 @@ sub addToLLD {
       }
 
       if (OBJ_ALLUSER eq $givenObjType) {
-          delete $_[3][$o]->{'{#SITEID}'};
-          delete $_[3][$o]->{'{#SITENAME}'};
-          delete $_[3][$o]->{'{#SITEDESC}'};
-          delete $_[3][$o]->{'{#MAC}'};
-          delete $_[3][$o]->{'{#OUI}'};
+          delete $_[3][$o]->{'{#SITEID}'},
+          delete $_[3][$o]->{'{#SITENAME}'},
+          delete $_[3][$o]->{'{#SITEDESC}'},
+          delete $_[3][$o]->{'{#MAC}'},
+          delete $_[3][$o]->{'{#OUI}'},
           delete $_[3][$o]->{'{#NAME}'};
       }
      $o++;
     }
-    logMessage("[<]\t Generated LLD piece:\n\t".(Data::Dumper::Dumper $_[3]), DEBUG_HIGH) if (DEBUG_HIGH <= $_[0]->{'debuglevel'});
-    logMessage("[-] addToLLD() finished", DEBUG_LOW);
+    logMessage(DEBUG_HIGH, "[<]\t Generated LLD piece:\n\t", $_[3]);
+    logMessage(DEBUG_LOW, "[-] addToLLD() finished");
     return TRUE;
 }
