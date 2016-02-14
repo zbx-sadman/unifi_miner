@@ -59,6 +59,7 @@ use constant {
      OBJ_USW => 'usw',
      OBJ_USW_PORT_TABLE => 'usw_port_table',
      OBJ_WLAN => 'wlan',
+     OBJ_WLANGROUP => 'wlangroup',
 
      # *** Debug levels ***
      DEBUG_LOW => 1,
@@ -210,7 +211,6 @@ $globalConfig->{'nullchar'}       = $options->{'n'} if defined ($options->{'n'})
 $globalConfig->{'key'}            = $options->{'k'} if defined ($options->{'k'});
 $globalConfig->{'mac'}            = lc($options->{'m'}) if defined ($options->{'m'});
 
-
 if (defined($options->{'i'})) {
    $options->{'i'} = lc($options->{'i'});
    if ( $options->{'i'} =~ m/^(?:[0-9a-z]{2}[:-]){5}(:?[0-9a-z]{2})$/ ) {
@@ -252,17 +252,22 @@ if (CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
       OBJ_NUMBER     , {'method' => BY_GET, 'path' => 'list/number'},
       OBJ_USERGROUP  , {'method' => BY_GET, 'path' => 'list/usergroup'},
       OBJ_WLAN       , {'method' => BY_GET, 'path' => 'list/wlanconf'},
+      OBJ_WLANGROUP  , {'method' => BY_GET, 'path' => 'list/wlangroup'},
       OBJ_SETTING    , {'method' => BY_GET, 'path' => 'get/setting'},
       OBJ_USW_PORT_TABLE , {'parent' => OBJ_USW},
-      OBJ_UAP_VAP_TABLE  , {'parent' => OBJ_UAP},
+      OBJ_UAP_VAP_TABLE  , {'parent' => OBJ_UAP}
    };
 } elsif (CONTROLLER_VERSION_3 eq $globalConfig->{'unifiversion'}) {
        $globalConfig->{'fetch_rules'} = {
-          OBJ_SITE      , {'method' => BY_CMD, 'path' => 'cmd/sitemgr', 'cmd' => '{"cmd":"get-sites"}'},
-          #OBJ_SYSINFO   , {'method' => BY_GET, 'path' => 'stat/sysinfo'},
-          OBJ_UAP       , {'method' => BY_GET, 'path' => 'stat/device'},
-          OBJ_USER      , {'method' => BY_GET, 'path' => 'stat/sta'},
-          OBJ_WLAN      , {'method' => BY_GET, 'path' => 'list/wlanconf'}
+          OBJ_SITE       , {'method' => BY_CMD, 'path' => 'cmd/sitemgr', 'cmd' => '{"cmd":"get-sites"}'},
+          OBJ_UAP        , {'method' => BY_GET, 'path' => 'stat/device'},
+          OBJ_SYSINFO    , {'method' => BY_GET, 'path' => 'stat/sysinfo'},
+          OBJ_USER       , {'method' => BY_GET, 'path' => 'stat/sta'},
+          OBJ_ALLUSER    , {'method' => BY_GET, 'path' => 'stat/alluser'},
+          OBJ_USERGROUP  , {'method' => BY_GET, 'path' => 'list/usergroup'},
+          OBJ_WLAN       , {'method' => BY_GET, 'path' => 'list/wlanconf'},
+          OBJ_WLANGROUP  , {'method' => BY_GET, 'path' => 'list/wlangroup'},
+          OBJ_SETTING    , {'method' => BY_GET, 'path' => 'get/setting'}
        };
 } elsif (CONTROLLER_VERSION_2 eq $globalConfig->{'unifiversion'}) {
        $globalConfig->{'fetch_rules'} = {
@@ -362,6 +367,7 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
        delete $selectingResult->{'total'};
        $buffer = $globalConfig->{'jsonxs'}->encode($selectingResult);
     } else {
+       print Data::Dumper::Dumper $selectingResult;
        # User want no discovery action
        my $totalKeysProcesseed = @{$selectingResult->{'data'}};
        if ($totalKeysProcesseed) {
