@@ -1,5 +1,5 @@
 ## UniFi Miner
-Actual release is v1.2.0-rc. Old releases can be found [here](https://github.com/zbx-sadman/unifi_miner/releases).
+Actual release is v1.3.0. Old releases can be found [here](https://github.com/zbx-sadman/unifi_miner/releases).
 
 Whatsnew: [Russian] (https://github.com/zbx-sadman/unifi_proxy/blob/master/experimental/README.md)
 
