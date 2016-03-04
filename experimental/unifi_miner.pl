@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.0
+#  UniFi Miner 1.3.1
 #
 #  (C) Grigory Prigodin 2015-2016
 #  Contact e-mail: zbx.sadman@gmail.com
@@ -196,7 +196,7 @@ if ($options->{'help'}) {
 $globalConfig->{'start_time'}     = clock_gettime(1) if ($globalConfig->{'write_stat'});
 
 # copy values that readed from command line arguments to global config and cast its if need    
-for (keys $configDefs) {
+for (keys %{$configDefs}) {
    # take cli key that linked to config item
    my $optkey = $configDefs->{$_}[0];
    if (defined $options->{$optkey}) {
