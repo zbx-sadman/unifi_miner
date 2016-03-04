@@ -11,7 +11,7 @@ use warnings;
 use LWP ();
 use POSIX ();
 use JSON::XS ();
-use Data::Dumper;
+use Data::Dumper ();
 use Time::HiRes ('clock_gettime');
 
 # uncomment for fix 'SSL23_GET_SERVER_HELLO:unknown' error
