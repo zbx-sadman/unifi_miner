@@ -1,5 +1,5 @@
 ## UniFi Miner
-Actual release is v1.3.0. You can download its [here](https://github.com/zbx-sadman/unifi_miner/releases).
+Actual release is v1.3.1. You can download its [here](https://github.com/zbx-sadman/unifi_miner/releases).
 
 Fastest client-server version of UniFi Miner is [UniFi Proxy](https://github.com/zbx-sadman/unifi_proxy). 
 

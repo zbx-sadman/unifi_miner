@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.0
+#  UniFi Miner 1.3.1
 #
 #  (C) Grigory Prigodin 2015-2016
 #  Contact e-mail: zbx.sadman@gmail.com
@@ -21,7 +21,7 @@ use Time::HiRes ('clock_gettime');
 use constant {
      TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_miner',
      TOOL_NAME => 'UniFi Miner',
-     TOOL_VERSION => '1.3.0',
+     TOOL_VERSION => '1.3.1',
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
@@ -67,6 +67,9 @@ use constant {
      DEBUG_HIGH => 3,
 
      # *** other ***
+     # Sitename which replaced {'sitename'} if '-s' option not used
+     SITENAME_DEFAULT => 'default',
+
      MAX_BUFFER_LEN => 65536,
      MAX_REQUEST_LEN => 256,
      KEY_ITEMS_NUM => 'items_num',
@@ -80,6 +83,8 @@ use constant {
      FETCH_LOGIN_ERROR => 2,
      TYPE_STRING => 1,
      TYPE_NUMBER => 2,
+     TYPE_BOOLEAN => 3,
+
      ROUND_NUMBER => 2,
      ST_SAVE => 1,
      ST_REST => 2,
@@ -100,39 +105,38 @@ sub writeStat;
 #  Default values for global scope
 #
 #########################################################################################################################################
-my $globalConfig = {
-
+my $configDefs = {
    # Where are store cache file. Better place is RAM-disk
-   'cachedir' => '/run/shm', 
+   'cachedir'                 => ['', TYPE_STRING, '/dev/shm'],
    # How much time live cache data. Use 0 for disabling cache processes
-   'cachemaxage' => 60,
+   'cachemaxage'              => ['c', TYPE_NUMBER, 60],
    # Debug level 
-   'debuglevel' => FALSE,
+   'debuglevel'               => ['d', TYPE_NUMBER, FALSE],
 
    # Default action for objects metric
-   'action' => ACT_DISCOVERY,
+   'action'                   => ['a', TYPE_STRING, ACT_DISCOVERY],
    # Operation object. wlan is exist in any case
-   'objecttype' => OBJ_WLAN, 
-   # ID of object (usually defined thru -i option)
+   'objecttype'               => ['o', TYPE_STRING, OBJ_WLAN],
    # Name of your site. Used 'default' if defined as empty and -s option not used
-   'sitename' => 'default', 
+   'sitename'                 => ['s', TYPE_STRING, 'default'],
    # Where are controller answer. See value of 'unifi.https.port' in /opt/unifi/data/system.properties
-   'unifilocation' => 'https://127.0.0.1:8443', 
+   'unifilocation'            => ['', TYPE_STRING, 'https://127.0.0.1:8443'],
    # UniFi controller version
-   'unifiversion' => CONTROLLER_VERSION_4,
-   # who can read data with API
-   'unifiuser' => 'stat',
+   'unifiversion'             => ['v', TYPE_STRING, CONTROLLER_VERSION_4],
+   # Who can read data with API
+   'unifiuser'                => ['u', TYPE_STRING, 'stat'],
    # His pass
-   'unifipass' => 'stat',
+   'unifipass'                => ['p', TYPE_STRING, 'stat'],
    # LWP timeout
-   'unifitimeout' => 60,
-   #
-   'nullchar' => '',
-   #id => '',
-   # key for count/get/sum acions
-   #key => 'name',
-   # MAC of object (usually defined thru -m option)
-   #mac => '',
+   'unifitimeout'             => ['', TYPE_NUMBER, 60],
+
+   'nullchar'                 => ['n', TYPE_STRING, ''],
+   'key'                      => ['k', TYPE_STRING, ''],
+   'mac'                      => ['m', TYPE_STRING, ''],
+   'id'                       => ['i', TYPE_STRING, '']
+};
+
+my $globalConfig = {
    # Where to store statistic data
    'stat_file' => './stat.txt',
    # Write statistic to _statfile_ or not
@@ -153,9 +157,7 @@ my $globalConfig = {
    'ua' => undef,
    # JSON::XS object
    'jsonxs' => JSON::XS->new->utf8,
-   # Sitename which replaced {'sitename'} if '-s' option not used
-   'default_sitename' => 'default', 
-   # -s option used sign
+   # -s option used flag
    'sitename_given' => FALSE, 
   },
 
@@ -173,9 +175,10 @@ for (@ARGV) {
     } else {
        # key not found - store value to hash item with $1 id.
        # $1 stay store old valued while next matching will not success
-       $options->{$1} = $_ if (defined ($1));
+       $options->{$1} = $_ if (defined $1);
     }
 }
+
 
 # print the version & help with --versin & --help
 if ($options->{'version'}) {
@@ -189,38 +192,46 @@ if ($options->{'help'}) {
    exit 0;
 }
 
-
 # clock_gettime(1)=> clock_gettime(CLOCK_MONOLITIC)
 $globalConfig->{'start_time'}     = clock_gettime(1) if ($globalConfig->{'write_stat'});
 
-# Rewrite default values by command line arguments
-$globalConfig->{'objecttype'}     = lc($options->{'o'}) if defined ($options->{'o'});
-
-$globalConfig->{'action'}         = lc($options->{'a'}) if defined ($options->{'a'});
-$globalConfig->{'cnttailvals'}    = (isInArray($globalConfig->{'action'}, (ACT_PCOUNT, ACT_PSUM))) ? TRUE : FALSE;
-$globalConfig->{'key'}            = $options->{'k'} if defined ($options->{'k'});
-# option -s not '' -> use given sitename. Otherwise use 'default'
-$globalConfig->{'sitename'}       = $options->{'s'}, $globalConfig->{'sitename_given'} = TRUE if (defined ($options->{'s'}));
-$globalConfig->{'cachemaxage'}    = 0+$options->{'c'} if (defined($options->{'c'}) && $options->{'c'} =~ /^\d+$/);
-$globalConfig->{'unifiversion'}   = $options->{'v'} if defined ($options->{'v'});
-$globalConfig->{'unifiuser'}      = $options->{'u'} if defined ($options->{'u'});
-$globalConfig->{'unifipass'}      = $options->{'p'} if defined ($options->{'p'});
-$globalConfig->{'unifilocation'}  = $options->{'l'} if defined ($options->{'l'});
-$globalConfig->{'debuglevel'}     = $options->{'d'} if defined ($options->{'d'});
-$globalConfig->{'nullchar'}       = $options->{'n'} if defined ($options->{'n'});
-$globalConfig->{'key'}            = $options->{'k'} if defined ($options->{'k'});
-$globalConfig->{'mac'}            = lc($options->{'m'}) if defined ($options->{'m'});
-
-if (defined($options->{'i'})) {
-   $options->{'i'} = lc($options->{'i'});
-   if ( $options->{'i'} =~ m/^(?:[0-9a-z]{2}[:-]){5}(:?[0-9a-z]{2})$/ ) {
-      $globalConfig->{'mac'} = $options->{'i'};
+# copy values that readed from command line arguments to global config and cast its if need    
+for (keys %{$configDefs}) {
+   # take cli key that linked to config item
+   my $optkey = $configDefs->{$_}[0];
+   if (defined $options->{$optkey}) {
+       if (TYPE_BOOLEAN  == $configDefs->{$_}[1]) {
+          # Boolean var is TRUE when switch arg is just given
+          $globalConfig->{$_} = defined $options->{$optkey} ? TRUE : FALSE;
+       } elsif (TYPE_NUMBER == $configDefs->{$_}[1]) {
+          # Numeric var is cast from string by 0+ operation
+          $globalConfig->{$_} = 0 + $options->{$optkey};
+       } else {
+          # All other types (string) values just copy to config
+          $globalConfig->{$_} = $options->{$optkey};
+       }
    } else {
-      $globalConfig->{'id'} = $options->{'i'};
-      $globalConfig->{'mac'} = '';
+       # if no arg given with cli - set to default value
+       $globalConfig->{$_} = $configDefs->{$_}[2];
    }
 }
 
+# 'sitename' need to special handling
+$globalConfig->{'sitename'}          = SITENAME_DEFAULT if (!$globalConfig->{'sitename'});
+$globalConfig->{'sitename_given'}    = $options->{$configDefs->{'sitename'}[0]} ? TRUE : FALSE;
+
+$globalConfig->{'cnttailvals'}    = (isInArray($globalConfig->{'action'}, (ACT_PCOUNT, ACT_PSUM))) ? TRUE : FALSE;
+
+# 'id' / 'mac' need to special handling too
+if ($globalConfig->{'id'}) {
+   if ( $globalConfig->{'id'} =~ m/^(?:[0-9a-z]{2}[:-]){5}(:?[0-9a-z]{2})$/ ) {
+      $globalConfig->{'mac'} = $globalConfig->{'id'},
+      $globalConfig->{'id'} = '';
+   } else {
+      $globalConfig->{'id'} = $globalConfig->{'id'},
+      $globalConfig->{'mac'} = '';
+   }
+}
 
 $globalConfig->{'api_path'}       = "$globalConfig->{'unifilocation'}/api";
 $globalConfig->{'login_path'}     = "$globalConfig->{'unifilocation'}/login";
@@ -367,7 +378,6 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
        delete $selectingResult->{'total'};
        $buffer = $globalConfig->{'jsonxs'}->encode($selectingResult);
     } else {
-       print Data::Dumper::Dumper $selectingResult;
        # User want no discovery action
        my $totalKeysProcesseed = @{$selectingResult->{'data'}};
        if ($totalKeysProcesseed) {
@@ -514,7 +524,7 @@ sub getMetric {
            $keyParts[$i]->{'e'} = [];
            # After splitting split again - for get keys, values and equation sign. Store it for future
            for (my $k = 0; $k < @fStrings; $k++) {
-              push($keyParts[$i]->{'e'}, {'k'=>$1, 's' => $2, 'v'=> $3}) if ($fStrings[$k] =~ /^([^=<>]+)(=|<>|<|>|>=|<=)([^=<>]+)$/);
+              push(@{$keyParts[$i]->{'e'}}, {'k'=>$1, 's' => $2, 'v'=> $3}) if ($fStrings[$k] =~ /^([^=<>]+)(=|<>|<|>|>=|<=)([^=<>]+)$/);
            }
            # count the number of filter expressions
            $nFilters++;
