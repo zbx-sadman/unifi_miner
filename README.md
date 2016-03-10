@@ -1,6 +1,8 @@
 ## UniFi Miner
 Actual release is v1.3.1. You can download its [here](https://github.com/zbx-sadman/unifi_miner/releases).
 
+See [change log](https://github.com/zbx-sadman/unifi_miner/blob/master/ChangeLog.md) before update.
+
 Fastest client-server version of UniFi Miner is [UniFi Proxy](https://github.com/zbx-sadman/unifi_proxy). 
 
 It is a small tool written in Perl, which helps deliver to the monitoring system (Zabbix) operational data - metrics and settings obtained from the UniFi controller via API, provided by Ubiquiti. Zabbix's Low-level Discovery (LLD) protocol are supported.
