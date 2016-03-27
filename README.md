@@ -1,5 +1,5 @@
 ## UniFi Miner
-Actual release is v1.3.1. You can download its [here](https://github.com/zbx-sadman/unifi_miner/releases).
+Actual release is v1.3.2. You can download its [here](https://github.com/zbx-sadman/unifi_miner/releases).
 
 See [change log](https://github.com/zbx-sadman/unifi_miner/blob/master/ChangeLog.md) before update.
 
