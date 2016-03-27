@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.1
+#  UniFi Miner 1.3.2
 #
 #  (C) Grigory Prigodin 2015-2016
 #  Contact e-mail: zbx.sadman@gmail.com
