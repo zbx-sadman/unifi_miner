@@ -301,8 +301,8 @@ my $selectingResult = {'total' => 0, 'data' => []};
 unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
    logMessage(DEBUG_LOW, "[!] No object type '$globalConfig->{'objecttype'}' supported");
 } else {
-   # if OBJ_SITE exists in fetch_rules - siteList could be obtained for 'discovery' action or in case with undefuned sitename
-   if ($globalConfig->{'fetch_rules'}->{OBJ_SITE()} && (ACT_DISCOVERY eq $globalConfig->{'action'} || !$globalConfig->{'sitename_given'}))  {
+   # if OBJ_SITE exists in fetch_rules - siteList could be obtained from controller
+   if ($globalConfig->{'fetch_rules'}->{OBJ_SITE()})  {
       # Clear array, because fetchData() will push data to its
       $siteList = [];
       # Get site list. v3 need {'sitename'} to use into 'cmd' URI
