@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.2
+#  UniFi Miner 1.3.3
 #
 #  (C) Grigory Prigodin 2015-2016
 #  Contact e-mail: zbx.sadman@gmail.com
@@ -21,7 +21,7 @@ use Time::HiRes ('clock_gettime');
 use constant {
      TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_miner',
      TOOL_NAME => 'UniFi Miner',
-     TOOL_VERSION => '1.3.2',
+     TOOL_VERSION => '1.3.3',
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
@@ -205,7 +205,7 @@ for (keys %{$configDefs}) {
           $globalConfig->{$_} = defined $options->{$optkey} ? TRUE : FALSE;
        } elsif (TYPE_NUMBER == $configDefs->{$_}[1]) {
           # Numeric var is cast from string by 0+ operation
-          $globalConfig->{$_} = ('' ne $options->{$optkey}) ? 0 + $options->{$optkey} : 0 ;
+          $globalConfig->{$_} = ('' ne $options->{$optkey}) ? 0 + $options->{$optkey} : $configDefs->{$_}[2] ;
        } else {
           # All other types (string) values just copy to config
           $globalConfig->{$_} = $options->{$optkey};
