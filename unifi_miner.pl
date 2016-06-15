@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.3
+#  UniFi Miner 1.3.4
 #
 #  (C) Grigory Prigodin 2015-2016
 #  Contact e-mail: zbx.sadman@gmail.com
@@ -12,16 +12,16 @@ use LWP ();
 use POSIX ();
 use JSON::XS ();
 use Data::Dumper ();
-use Time::HiRes ('clock_gettime');
+#use Time::HiRes ('clock_gettime');
 
 # uncomment for fix 'SSL23_GET_SERVER_HELLO:unknown' error
-#use IO::Socket::SSL ();
-#IO::Socket::SSL::set_default_context(new IO::Socket::SSL::SSL_Context(SSL_version => 'tlsv1', SSL_verify_mode => 0));
+use IO::Socket::SSL ();
+IO::Socket::SSL::set_default_context(IO::Socket::SSL::SSL_Context->new(SSL_version => 'tlsv1', SSL_verify_mode => 0));
 
 use constant {
      TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_miner',
      TOOL_NAME => 'UniFi Miner',
-     TOOL_VERSION => '1.3.3',
+     TOOL_VERSION => '1.3.4',
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
@@ -120,7 +120,7 @@ my $configDefs = {
    # Name of your site. Used 'default' if defined as empty and -s option not used
    'sitename'                 => ['s', TYPE_STRING, 'default'],
    # Where are controller answer. See value of 'unifi.https.port' in /opt/unifi/data/system.properties
-   'unifilocation'            => ['', TYPE_STRING, 'https://127.0.0.1:8443'],
+   'unifilocation'            => ['l', TYPE_STRING, 'https://127.0.0.1:8443'],
    # UniFi controller version
    'unifiversion'             => ['v', TYPE_STRING, CONTROLLER_VERSION_4],
    # Who can read data with API
@@ -237,7 +237,7 @@ $globalConfig->{'api_path'}       = "$globalConfig->{'unifilocation'}/api";
 $globalConfig->{'login_path'}     = "$globalConfig->{'unifilocation'}/login";
 $globalConfig->{'logout_path'}    = "$globalConfig->{'unifilocation'}/logout";
 $globalConfig->{'login_data'}     = "username=$globalConfig->{'unifiuser'}&password=$globalConfig->{'unifipass'}&login=login";
-$globalConfig->{'content_type'}     = 'x-www-form-urlencoded';
+$globalConfig->{'content_type'}   = 'application/x-www-form-urlencoded';
 # Set controller version specific data
 if (CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
    $globalConfig->{'login_path'}  = "$globalConfig->{'unifilocation'}/api/login";
@@ -462,13 +462,14 @@ sub logMessage
         print (('ARRAY' eq ref($_[$i]) || ('HASH' eq ref($_[$i]))) ? Data::Dumper::Dumper $_[$i] : $_[$i]);
     }
     print "\n";
+    return TRUE;
   }
 
 sub isInArray {
     for (my $i = 1; $i < @_; $i++) {
-        return 1 if ($_[0] eq $_[$i]);
+        return TRUE if ($_[0] eq $_[$i]);
     }
-    return 0;
+    return FALSE;
 }
 
 #####################################################################################################################################
@@ -482,6 +483,7 @@ sub writeStat {
     # chmod 0666, $fh;
     print $fh "$_[0]->{'start_time'},$_[0]->{'stop_time'},$_[0]->{'unifiversion'},$_[0]->{'sitename'},$_[0]->{'objecttype'},$_[0]->{'id'},$_[0]->{'mac'},$_[0]->{'key'},$_[0]->{action},$_[0]->{'downloaded'},$_[0]->{'debuglevel'}\n";
     close $fh;
+    return TRUE;
 }
 
 #*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/
@@ -841,7 +843,7 @@ sub fetchDataFromController {
    ################################################## Logging in  ##################################################
    # Check to 'still logged' state
    # ->head() not work
-   $response = $_[0]->{'ua'}->get("$_[0]->{'api_path'}/self");
+   $response = $_[0]->{'ua'}->get("$_[0]->{'api_path'}/s/super/get/setting");
    # FETCH_OTHER_ERROR = is_error == TRUE (1), FETCH_NO_ERROR = is_error == FALSE (0)
    # FETCH_OTHER_ERROR stop work if get() haven't success && no error 401 (login required). For example - error 500 (connect refused)
    $errorCode = $response->is_error;
@@ -850,7 +852,7 @@ sub fetchDataFromController {
         # logging in
         logMessage(DEBUG_LOW, "[.]\t\tTry to log in into controller...");
         $response = $_[0]->{'ua'}->post($_[0]->{'login_path'}, 'Content_type' => $_[0]->{'content_type'}, 'Content' => $_[0]->{'login_data'});
-        logMessage(DEBUG_HIGH, "[>>]\t\t HTTP respose:\n\t", $response);
+        logMessage(DEBUG_HIGH, "[>>]\t\t HTTP respose:\n\t", {%$response});
         $errorCode = $response->is_error;
         if (CONTROLLER_VERSION_4 eq $_[0]->{'unifiversion'}) {
            # v4 return 'Bad request' (code 400) on wrong auth
@@ -985,7 +987,8 @@ sub addToLLD {
 #         ;
 #      } elsif ($givenObjType eq OBJ_USERGROUP) {
 #         ;
-#      } elsif (OBJ_UAP eq $givenObjType) {
+      } elsif (OBJ_UAP eq $givenObjType) {
+         $_[3][$o]->{'{#NAME}'}      = $_->{'name'} ? "$_->{'name'}" : "$_->{'mac'}";
 #         ;
 #      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
 #        ;

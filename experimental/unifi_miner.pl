@@ -122,7 +122,7 @@ my $configDefs = {
    # Where are controller answer. See value of 'unifi.https.port' in /opt/unifi/data/system.properties
    'unifilocation'            => ['l', TYPE_STRING, 'https://127.0.0.1:8443'],
    # UniFi controller version
-   'unifiversion'             => ['v', TYPE_STRING, CONTROLLER_VERSION_3],
+   'unifiversion'             => ['v', TYPE_STRING, CONTROLLER_VERSION_4],
    # Who can read data with API
    'unifiuser'                => ['u', TYPE_STRING, 'stat'],
    # His pass
@@ -987,7 +987,8 @@ sub addToLLD {
 #         ;
 #      } elsif ($givenObjType eq OBJ_USERGROUP) {
 #         ;
-#      } elsif (OBJ_UAP eq $givenObjType) {
+      } elsif (OBJ_UAP eq $givenObjType) {
+         $_[3][$o]->{'{#NAME}'}      = $_->{'name'} ? "$_->{'name'}" : "$_->{'mac'}";
 #         ;
 #      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
 #        ;
