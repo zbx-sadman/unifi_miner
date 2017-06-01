@@ -10,12 +10,12 @@ It is a small tool written in Perl, which helps deliver to the monitoring system
 ![Zabbix: connected clients](http://community.ubnt.com/t5/image/serverpage/image-id/53219iB1CA79D24EFB2BEB/image-size/original)
 
 
-If you have a question about Miner, please, read [Russian] (https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-guide-in-Russian) or 
+If you have a question about Miner, please, read [Russian](https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-guide-in-Russian) or 
 [English](https://github.com/zbx-sadman/unifi_miner/wiki/UniFi-Miner-guide-in-English) guide.
 
 If u have an problem, you can search the existing closed or open [issues](https://github.com/zbx-sadman/unifi_miner/issues). 
 
-Templates for Zabbix [here] (https://github.com/zbx-sadman/unifi_miner/tree/master/Zabbix_Templates). Note, that since v1.3 released, [UniFi proxy] (https://github.com/zbx-sadman/unifi_proxy/tree/master/Zabbix_Templates) templates must be used.
+Templates for Zabbix [here](https://github.com/zbx-sadman/unifi_miner/tree/master/Zabbix_Templates). Note, that since v1.3 released, [UniFi proxy](https://github.com/zbx-sadman/unifi_proxy/tree/master/Zabbix_Templates) templates must be used.
 
 All new experimental features can be found [here](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental)
 
