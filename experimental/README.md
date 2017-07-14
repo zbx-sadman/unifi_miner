@@ -1,5 +1,12 @@
 # Experimental place
 
+### 14.07.2017
+[Miner 1.3.5](https://github.com/zbx-sadman/unifi_miner/blob/master/experimental/unifi_miner.pl) is testing:
+ - TLS version is 1.2 to make compability to UniFi controller v5.5;
+ - New object type added: _voucher_. Note that yo must point miner to one sitename only, when use _voucher_ object, because API shows the same vouchers for any site and you can get wrong result (number of vouchers can be _xN_, where N - number of sites).
+
+ Miner is prepared to add real v5 support. Changes is coming soon.
+
 ### 19.01.2015
 - [Miner 1.1.0](https://github.com/zbx-sadman/unifi_miner/blob/master/experimental/unifi_miner.pl) is testing. All features of [experimental branch of UniFi Proxy](https://github.com/zbx-sadman/unifi_proxy/tree/master/experimental) implemented to new Miner release.
 
