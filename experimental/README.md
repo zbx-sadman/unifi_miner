@@ -6,8 +6,6 @@
 ### 13.07.2015
 - Zabbix loadable module rewritten for using with Zabbix server and Zabbix Agent;
 - Miner 2 moved to his own project directory: [UniFi Proxy](https://github.com/zbx-sadman/unifi_proxy);
->>>>>>> origin/master
-
 
 ### 10.07.2015
 - Miner 1.0.0 released, [Miner2](https://github.com/zbx-sadman/unifi_proxy) (work name - UniFi Proxy) started;

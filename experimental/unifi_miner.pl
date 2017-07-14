@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.4
+#  UniFi Miner 1.3.5
 #
-#  (C) Grigory Prigodin 2015-2016
+#  (C) Grigory Prigodin 2015-2017
 #  Contact e-mail: zbx.sadman@gmail.com
 # 
 #
@@ -10,18 +10,19 @@ use strict;
 use warnings;
 use LWP ();
 use POSIX ();
-use JSON::XS ();
+use JSON ();
+#use JSON::XS ();
 use Data::Dumper ();
 #use Time::HiRes ('clock_gettime');
 
 # uncomment for fix 'SSL23_GET_SERVER_HELLO:unknown' error
 use IO::Socket::SSL ();
-IO::Socket::SSL::set_default_context(IO::Socket::SSL::SSL_Context->new(SSL_version => 'tlsv1', SSL_verify_mode => 0));
+IO::Socket::SSL::set_default_context(IO::Socket::SSL::SSL_Context->new(SSL_version => 'TLSv12', SSL_verify_mode => 0));
 
 use constant {
      TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_miner',
      TOOL_NAME => 'UniFi Miner',
-     TOOL_VERSION => '1.3.4',
+     TOOL_VERSION => '1.3.5',
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
@@ -39,9 +40,12 @@ use constant {
      CONTROLLER_VERSION_2 => 'v2',
      CONTROLLER_VERSION_3 => 'v3',
      CONTROLLER_VERSION_4 => 'v4',
+     CONTROLLER_VERSION_4 => 'v5',
 
      # *** Managed objects ***
+     OBJ_EXTENSION => 'extension',
      OBJ_HEALTH => 'health',
+     OBJ_NUMBER => 'number',
      OBJ_SYSINFO => 'sysinfo',
      OBJ_SETTING => 'setting',
      OBJ_NETWORK => 'network',
@@ -49,17 +53,16 @@ use constant {
      OBJ_UAP => 'uap',
      OBJ_UAP_VAP_TABLE => 'uap_vap_table',
      OBJ_UPH => 'uph',
-     OBJ_EXTENSION => 'extension',
-     OBJ_NUMBER => 'number',
      OBJ_USG => 'usg',
      OBJ_USER => 'user',
      OBJ_USERGROUP => 'usergroup',
-     # Don't use object alluser with LLD - JSON may be broken due result size > 65535b (Max Zabbix buffer)
-     OBJ_ALLUSER => 'alluser',
      OBJ_USW => 'usw',
      OBJ_USW_PORT_TABLE => 'usw_port_table',
+     OBJ_VOUCHER => 'voucher',
      OBJ_WLAN => 'wlan',
      OBJ_WLANGROUP => 'wlangroup',
+     # Don't use object alluser with LLD - JSON may be broken due result size > 65535b (Max Zabbix buffer)
+     OBJ_ALLUSER => 'alluser',
 
      # *** Debug levels ***
      DEBUG_LOW => 1,
@@ -156,7 +159,7 @@ my $globalConfig = {
    # LWP::UserAgent object, which must be saved between fetchData() calls
    'ua' => undef,
    # JSON::XS object
-   'jsonxs' => JSON::XS->new->utf8,
+   'json_engine' => JSON->new->utf8,
    # -s option used flag
    'sitename_given' => FALSE, 
   },
@@ -167,9 +170,9 @@ for (@ARGV) {
     # try to take key from $_
     if ( m/^[-](.+)/) {
        # key is '--version' ? Set flag && do nothing inside loop
-       $options->{'version'} = TRUE, next if ($1 eq '-version');
+       $options->{'version'} = TRUE, last if ($1 eq '-version');
        # key is --help - do the same
-       $options->{'help'}    = TRUE, next if ($1 eq '-help');
+       $options->{'help'}    = TRUE, last if ($1 eq '-help');
        # key is just found? Init hash item
        $options->{$1} = '';
     } else {
@@ -187,8 +190,8 @@ if ($options->{'version'}) {
 }
   
 if ($options->{'help'}) {
-   print "\n",TOOL_NAME," v", TOOL_VERSION, "\n\nusage: $0 [-C /path/to/config/file] [-D]\n",
-          "\t-C\tpath to config file\n\t-D\trun in daemon mode\n\nAll other help on ", TOOL_HOMEPAGE, "\n\n";
+   print "\n",TOOL_NAME," v", TOOL_VERSION, "\n\nusage: $0 [-o object_type] [-i {id | mac} | -m mac] [-k key] [-a action] [-l unifi_location] [-s sitename] [-u unifi_username] [-p unifi_password] [-v unifi_controller_version] [-d debug_level] [-n null_replacer] [-c cachemaxage_sec] \n",
+          "\n\nAll other help on ", TOOL_HOMEPAGE, "\n\n";
    exit 0;
 }
 
@@ -258,6 +261,7 @@ if (CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
       OBJ_USER       , {'method' => BY_GET, 'path' => 'stat/sta'},
       OBJ_ALLUSER    , {'method' => BY_GET, 'path' => 'stat/alluser'},
       OBJ_HEALTH     , {'method' => BY_GET, 'path' => 'stat/health'},
+      OBJ_VOUCHER    , {'method' => BY_GET, 'path' => 'stat/voucher'},
       OBJ_NETWORK    , {'method' => BY_GET, 'path' => 'list/networkconf'},
       OBJ_EXTENSION  , {'method' => BY_GET, 'path' => 'list/extension'},
       OBJ_NUMBER     , {'method' => BY_GET, 'path' => 'list/number'},
@@ -291,6 +295,7 @@ if (CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
 }
 
 logMessage(DEBUG_MID, "[.] globalConfig:\n", $globalConfig);
+logMessage(DEBUG_MID, "[.] JSON backend: " . JSON::backend());
 
 ################################################## Main action ##################################################
 # made fake site list, cuz fetchData(v2) just ignore sitename
@@ -376,11 +381,15 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
        logMessage(DEBUG_MID, "[.] Make LLD JSON");
        # make JSON
        delete $selectingResult->{'total'};
-       $buffer = $globalConfig->{'jsonxs'}->encode($selectingResult);
+       $buffer = $globalConfig->{'json_engine'}->encode($selectingResult);
     } else {
        # User want no discovery action
        my $totalKeysProcesseed = @{$selectingResult->{'data'}};
-       if ($totalKeysProcesseed) {
+####################
+       if (0 == $totalKeysProcesseed) {
+          $buffer = 0;
+###################
+       } else {
           my $result = @{$selectingResult->{'data'}}[0];
           if (ACT_GET eq $globalConfig->{'action'}) { 
              $buffer = $result;
@@ -768,7 +777,7 @@ sub fetchData {
             # ...fetch new data from controller...
             fetchDataFromController($_[0], $_[2], $objPath, $jsonData, $useShortWay) or logMessage(DEBUG_LOW, "[!] Can't fetch data from controller"), close ($fh), return FALSE;
             # unbuffered write it to temp file..
-            syswrite ($fh, $_[0]->{'jsonxs'}->encode($jsonData));
+            syswrite ($fh, $_[0]->{'json_engine'}->encode($jsonData));
             # Now unlink old cache filedata from cache filename 
             # All processes, who already read data - do not stop and successfully completed reading
             unlink ($cacheFileName);
@@ -791,7 +800,7 @@ sub fetchData {
        # open file
        open($fh, "<:mmap", $cacheFileName) or logMessage(DEBUG_LOW, "[!] Can't open '$cacheFileName' ($!)"), return FALSE;
        # read data from file
-       $jsonData=$_[0]->{'jsonxs'}->decode(<$fh>);
+       $jsonData=$_[0]->{'json_engine'}->decode(<$fh>);
        # close cache
        close($fh) or logMessage(DEBUG_LOW, "[!] Can't close cache file ($!)"), return FALSE;
     }
@@ -889,7 +898,7 @@ sub fetchDataFromController {
    }
 
    logMessage(DEBUG_HIGH, "[>>]\t\t Fetched data:\n\t", $response->decoded_content);
-   $_[3] = $_[0]->{'jsonxs'}->decode(${$response->content_ref()});
+   $_[3] = $_[0]->{'json_engine'}->decode(${$response->content_ref()});
 
 
    # server answer is ok ?
@@ -992,8 +1001,11 @@ sub addToLLD {
 #         ;
 #      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
 #        ;
+      } elsif (OBJ_VOUCHER eq $givenObjType) {
+         $_[3][$o]->{'{#QUOTA}'}     = $_->{'quota'};
+         $_[3][$o]->{'{#USED}'}      = $_->{'used'};
+         $_[3][$o]->{'{#DURATION}'}  = $_->{'duration'};
       }
-
       if (OBJ_ALLUSER eq $givenObjType) {
           delete $_[3][$o]->{'{#SITEID}'},
           delete $_[3][$o]->{'{#SITENAME}'},
