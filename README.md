@@ -19,6 +19,8 @@ Templates for Zabbix [here](https://github.com/zbx-sadman/unifi_miner/tree/maste
 
 All new experimental features can be found [here](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental)
 
+[![donation](https://camo.githubusercontent.com/1d4c796d0043ba18176a68767c2ee55188d55cc1/68747470733a2f2f7777772e70617970616c6f626a656374732e636f6d2f656e5f47422f692f62746e2f62746e5f646f6e6174655f4c472e676966)](https://www.paypal.me/GrigoryP)
+
 ### My other projects
  [_UniFi Proxy_](https://github.com/zbx-sadman/unifi_proxy) - client-server version of UniFi Miner
  
