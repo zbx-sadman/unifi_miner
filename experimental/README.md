@@ -1,9 +1,12 @@
 # Experimental place
 
+### 02.08.2017
+ - New object type added: _dpi_ & _sitedpi_ . It is the same object, but _sitedpi_ works on Controller v.5.6 and above (may be).
+
 ### 14.07.2017
 [Miner 1.3.5](https://github.com/zbx-sadman/unifi_miner/blob/master/experimental/unifi_miner.pl) is testing:
- - TLS version is 1.2 to make compability to UniFi controller v5.5;
- - New object type added: _voucher_. Note that yo must point miner to one sitename only, when use _voucher_ object, because API shows the same vouchers for any site and you can get wrong result (number of vouchers can be _xN_, where N - number of sites).
+ - TLS version is 1.2 now to make compability to UniFi controller v5.5;
+ - New object type added: _voucher_. Note that you must point Miner to one sitename only, when use _voucher_ object, because API shows the same vouchers for any site and you can get wrong result (number of vouchers can be _xN_, where N - number of sites).
 
  Miner is prepared to add real v5 support. Changes is coming soon.
 
