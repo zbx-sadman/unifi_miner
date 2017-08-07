@@ -1,13 +1,16 @@
 ## UniFi Miner change log 
+
+### v1.3.5
 Fixed:
-- TLS changed to 1.2 to works with UniFi Controller v5.5 / v5.6 and above;
+- Metrics obtaining from UniFi Security Gateway;
 
 Changes:
 - Perl JSON now used instead JSON::XS to make able choosing JSON backend;  
+- TLS moved to 1.2 to works with UniFi Controller v5.5 / v5.6 and above;
 
 Added:
-- New objects: _voucher_ , _dpi_ / _sitedpi_
-
+- UniFi Controller v5 releases real support; 
+- New objects: _voucher_ , _dpi_ / _sitedpi_.
 
 ### v1.3.4
 Fixed:
