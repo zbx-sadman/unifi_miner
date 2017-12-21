@@ -11,8 +11,8 @@ use warnings;
 use LWP ();
 use POSIX ();
 use JSON ();
-#use JSON::XS ();
 use Data::Dumper ();
+#use Data::Dumper;
 #use Time::HiRes ('clock_gettime');
 
 # uncomment for fix 'SSL23_GET_SERVER_HELLO:unknown' error
@@ -22,7 +22,7 @@ IO::Socket::SSL::set_default_context(IO::Socket::SSL::SSL_Context->new(SSL_versi
 use constant {
      TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_miner',
      TOOL_NAME => 'UniFi Miner',
-     TOOL_VERSION => '1.3.5',
+     TOOL_VERSION => '1.3.6',
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
@@ -35,6 +35,7 @@ use constant {
      ACT_PCOUNT => 'pcount',
      ACT_PSUM => 'psum',
      ACT_SUM => 'sum',
+     ACT_RAW => 'raw',
 
      # *** Controller versions ***
      CONTROLLER_VERSION_2 => 'v2',
@@ -424,6 +425,10 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
        # make JSON
        delete $selectingResult->{'total'};
        $buffer = $globalConfig->{'json_engine'}->encode($selectingResult);
+    } elsif (ACT_RAW eq $globalConfig->{'action'}) {
+       logMessage(DEBUG_MID, "[.] Make selected object JSON");
+#       print Dumper ($selectingResult);
+       $buffer = $globalConfig->{'json_engine'}->encode($selectingResult->{'data'}[0]);
     } else {
        # User want no discovery action
        my $totalKeysProcesseed = @{$selectingResult->{'data'}};
@@ -707,6 +712,12 @@ sub getMetric {
            }
            # end of filter work part
 
+           # JSON object selected by '*' key to return result as JSON for Zabbix 3.4.4 preprocessing feature
+           if (KEY_ANY eq $keyParts[$keyPos]->{'e'} && ('HASH' eq ref($currentRoot))) {
+#             print Dumper($currentRoot);
+               push(@{$_[3]->{'data'}}, $currentRoot), goto FINISH if (ACT_RAW eq $_[0]->{'action'});
+           }
+
            # hash with name equal key part is reached from current root with one hop?
            # ToDo: (... ||  KEY_ANY eq $keyParts[$keyPos]->{'e'}) for 'part.subpart.[filter].*' keys
            if (exists($currentRoot->{$keyParts[$keyPos]->{'e'}})) {
@@ -726,7 +737,7 @@ sub getMetric {
                     push(@{$_[3]->{'data'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}})    if ($actCurrentValue && (ACT_DISCOVERY eq $_[0]->{'action'}));
                  } else {
                     # sub pointed to property. Its can be counted or summed without programm exception
-                    push(@{$_[3]->{'data'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}})    if ($actCurrentValue && (ACT_DISCOVERY ne $_[0]->{'action'}));
+                    push(@{$_[3]->{'data'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}})    if ($actCurrentValue && (ACT_DISCOVERY eq $_[0]->{'action'}));
                     # just exit from search loop
                     last if ($actCurrentValue && ACT_GET eq $_[0]->{'action'});
                     # all values must be counted while PER* actions proceseed 
@@ -752,6 +763,8 @@ sub getMetric {
      } # if (ref($currentRoot) eq 'HASH')
  }
     ###########################################    End of main loop    ###########################################################
+
+FINISH:
 
  logMessage(DEBUG_HIGH, "[<]\t result:'\n\t", $_[3]);
  logMessage(DEBUG_LOW, "[-] getMetric() finished ");
@@ -858,7 +871,9 @@ sub fetchData {
      # Object have ID...
      if ($_[3]) {
        #  ...and its required object? If so push - object to global @objJSON and jump out from the loop.
-       $_[4][0] = @{$jsonData}[$i], last if (@{$jsonData}[$i]->{$idKey} eq $_[3]);
+       $_[4][0] = @{$jsonData}[$i], last if (exists(@{$jsonData}[$i]->{$idKey}) && (@{$jsonData}[$i]->{$idKey} eq $_[3]));
+      
+# $_[4][0] = @{$jsonData}[$i], last if (@{$jsonData}[$i]->{$idKey} eq $_[3]);
      } else {
        # otherwise
        push (@{$_[4]}, @{$jsonData}[$i]) if (!exists(@{$jsonData}[$i]->{'type'}) || (@{$jsonData}[$i]->{'type'} eq $_[2]));

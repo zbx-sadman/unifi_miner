@@ -1,5 +1,15 @@
 # Experimental place
 
+### 21.12.2017
+[Miner 1.3.6](https://github.com/zbx-sadman/unifi_miner/blob/master/experimental/unifi_miner.pl) is testing:
+
+ - New action added: _raw_ (can be renamed later). New key _*_ added too. This pair must helps to get RAW JSON of UniFi object (or its nested object) for using with Zabbix v3.4 JSON preprocessing.
+   Example:
+```
+./unifi_miner.pl -a raw -o site -s default -k "*"
+{"attr_no_delete":true,"_id":"5523f87e99320d293df816fd","desc":"Default","name":"default","attr_hidden_id":"default","role":"readonly"}
+```
+
 ### 02.08.2017
  - New object type added: _dpi_ & _sitedpi_ . It is the same object, but _sitedpi_ works on Controller v.5.6 and above (may be).
 
