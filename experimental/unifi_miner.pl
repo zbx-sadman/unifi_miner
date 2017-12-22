@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.5
+#  UniFi Miner 1.3.6
 #
 #  (C) Grigory Prigodin 2015-2017
 #  Contact e-mail: zbx.sadman@gmail.com
@@ -737,7 +737,7 @@ sub getMetric {
                     push(@{$_[3]->{'data'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}})    if ($actCurrentValue && (ACT_DISCOVERY eq $_[0]->{'action'}));
                  } else {
                     # sub pointed to property. Its can be counted or summed without programm exception
-                    push(@{$_[3]->{'data'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}})    if ($actCurrentValue && (ACT_DISCOVERY eq $_[0]->{'action'}));
+                    push(@{$_[3]->{'data'}}, $currentRoot->{$keyParts[$keyPos]->{'e'}})    if ($actCurrentValue && (ACT_DISCOVERY ne $_[0]->{'action'}));
                     # just exit from search loop
                     last if ($actCurrentValue && ACT_GET eq $_[0]->{'action'});
                     # all values must be counted while PER* actions proceseed 
