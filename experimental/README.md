@@ -1,5 +1,14 @@
 # Experimental place
 
+### 22.12.2017
+ - New feature added: regexp for filters. Regexp pattern can be used for filtering values of JSON keys. Refer to Perl Regexp tutorial for details. Use simple pattern, please. Example: 
+
+```
+# Count connected users on UAPs, which MAC's contained '16:5c' or '73:13' substrings.
+./unifi_miner.pl -a count -o uap -s default -k "[mac=~16:5c|mac=~73:13].num_sta"
+```
+
+
 ### 21.12.2017
 [Miner 1.3.6](https://github.com/zbx-sadman/unifi_miner/blob/master/experimental/unifi_miner.pl) is testing:
 

@@ -83,7 +83,7 @@ use constant {
      MAX_BUFFER_LEN => 65536,
      MAX_REQUEST_LEN => 256,
      KEY_ITEMS_NUM => 'items_num',
-     KEY_ANY => '*',
+     MASK_ANY => '*',
      TRUE => 1,
      FALSE => 0,
      BY_CMD => 1,
@@ -331,10 +331,10 @@ if (CONTROLLER_VERSION_5 eq $globalConfig->{'unifiversion'}) {
    };
 } elsif (CONTROLLER_VERSION_2 eq $globalConfig->{'unifiversion'}) {
    $globalConfig->{'fetch_rules'} = {
-      OBJ_UAP                , {'method' => BY_GET, 'path' => 'stat/device', 'excl_sitename' => TRUE},
-      OBJ_WLAN               , {'method' => BY_GET, 'path' => 'list/wlanconf', 'excl_sitename' => TRUE},
-      OBJ_USER               , {'method' => BY_GET, 'path' => 'stat/sta', 'excl_sitename' => TRUE}
-       };
+      OBJ_UAP             , {'method' => BY_GET, 'path' => 'stat/device', 'excl_sitename' => TRUE},
+      OBJ_WLAN            , {'method' => BY_GET, 'path' => 'list/wlanconf', 'excl_sitename' => TRUE},
+      OBJ_USER            , {'method' => BY_GET, 'path' => 'stat/sta', 'excl_sitename' => TRUE}
+   };
 }
 
 logMessage(DEBUG_MID, "[.] globalConfig:\n", $globalConfig);
@@ -427,7 +427,6 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
        $buffer = $globalConfig->{'json_engine'}->encode($selectingResult);
     } elsif (ACT_RAW eq $globalConfig->{'action'}) {
        logMessage(DEBUG_MID, "[.] Make selected object JSON");
-#       print Dumper ($selectingResult);
        $buffer = $globalConfig->{'json_engine'}->encode($selectingResult->{'data'}[0]);
     } else {
        # User want no discovery action
@@ -549,15 +548,20 @@ sub writeStat {
 #*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/
 sub getMetric {
     my $currentRoot = $_[1], my $state = ST_SAVE, my $stack, my $arrIdx, my $arrSize, my $keyPos = -1, my $nFilters = 0, my $stackPos = -1, my $allValues = 0,
-    my $keepKeyPos = FALSE, my $filterPassed = 0, my $isLastFilter = FALSE, my $actCurrentValue, my $i, my $processedKeysNum = 0;
+    my $keepKeyPos = FALSE, my $filterPassed = 0, my $isLastFilter = FALSE, my $actCurrentValue, my $i, my $processedKeysNum = 0, my @keyParts;
   
     logMessage(DEBUG_LOW, "[+] getMetric() started");
     logMessage(DEBUG_LOW, "[>]\t args: key: '$_[2]', action: '$_[0]->{'action'}'");
     logMessage(DEBUG_HIGH, "[>]\t incoming object info:'\n\t", $_[1]);
     
-    # split key to parts for analyze
-    my @keyParts = split (/[.]/, $_[2]);
-    #print Dumper @keyParts;
+    # split key to parts for analyze 
+    # fast splitting procedure for filters without dots (.)
+    #@keyParts = split (/[.]/, $_[2]);
+
+    # no so fast splitting procedure for filters contained dots (.) 
+    # it just some Perl magic passes and need to be optimized
+    # push & while used to avoid pushing 'undef' capture groups work results into destination array
+    push @keyParts, $1 // $2 while $_[2] =~ /(?:(\[.*\])|([^\.\[\]]+)\.?)/g;
 
     # do analyzing, put subkeys to array, processing filter expressions
     # keyParts array:
@@ -582,7 +586,7 @@ sub getMetric {
            $keyParts[$i]->{'e'} = [];
            # After splitting split again - for get keys, values and equation sign. Store it for future
            for (my $k = 0; $k < @fStrings; $k++) {
-              push(@{$keyParts[$i]->{'e'}}, {'k'=>$1, 's' => $2, 'v'=> $3}) if ($fStrings[$k] =~ /^([^=<>]+)(=|<>|<|>|>=|<=)([^=<>]+)$/);
+              push(@{$keyParts[$i]->{'e'}}, {'k'=>$1, 's' => $2, 'v'=> $3}) if ($fStrings[$k] =~ /^([^=<>~!]+)(=|<>|<|>|>=|<=|=~|!~)([^=<>~!]+)$/);
            }
            # count the number of filter expressions
            $nFilters++;
@@ -592,7 +596,6 @@ sub getMetric {
         }
     }
     # Some special actions is processed
-
    ###########################################     Main loop    ###########################################################
    while (TRUE) {
 
@@ -661,11 +664,14 @@ sub getMetric {
            if (defined($keyParts[$keyPos]->{'l'})) {
               my $fData = $keyParts[$keyPos]->{'e'}, my $matchCount=0;
               # run trought flter list
+
               for ($i = 0; $i < @{$fData}; $i++ ) {
                   # if key (from filter) in object is defined.
                   if (defined($currentRoot->{@{$fData}[$i]->{'k'}})) {
+                     if (MASK_ANY eq @{$fData}[$i]->{'v'}) {
+                       $matchCount++;
                      # '&' logic need to use
-                     if ('&' eq $keyParts[$keyPos]->{'l'}) {
+                     } elsif ('&' eq $keyParts[$keyPos]->{'l'}) {
                         # JSON key value equal / not equal (depend of equation sign) to value of filter - increase counter
                         $matchCount++ if ('='  eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} eq @{$fData}[$i]->{'v'}));
                         $matchCount++ if ('<>' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} ne @{$fData}[$i]->{'v'}));
@@ -673,6 +679,9 @@ sub getMetric {
                         $matchCount++ if ('<'  eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} <  @{$fData}[$i]->{'v'}));
                         $matchCount++ if ('<=' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} <= @{$fData}[$i]->{'v'}));
                         $matchCount++ if ('>=' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} >= @{$fData}[$i]->{'v'}));
+
+                        $matchCount++ if ('=~' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} =~ m/@{$fData}[$i]->{'v'}/s));
+                        $matchCount++ if ('!~' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} !~ m/@{$fData}[$i]->{'v'}/s));
                      # '|' logic need to use
                      } elsif ('|' eq $keyParts[$keyPos]->{'l'}) {
                         # JSON key value equal / not equal (depend of equation sign) to value of filter - all filters is passed, leave local loop
@@ -682,10 +691,11 @@ sub getMetric {
                         $matchCount = @{$fData}, last if ('<'  eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} <  @{$fData}[$i]->{'v'}));
                         $matchCount = @{$fData}, last if ('<=' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} <= @{$fData}[$i]->{'v'}));
                         $matchCount = @{$fData}, last if ('>=' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} >= @{$fData}[$i]->{'v'}));
+                        $matchCount = @{$fData}, last if ('=~' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} =~ m/@{$fData}[$i]->{'v'}/s));
+                        $matchCount = @{$fData}, last if ('!~' eq @{$fData}[$i]->{'s'} && ($currentRoot->{@{$fData}[$i]->{'k'}} !~ m/@{$fData}[$i]->{'v'}/s));
                      }
                   }
               }
-
               # part of key was filter expression and object is matched
               if ($matchCount == @{$fData}) {
                  # Object is good - just skip filter expression and work
@@ -713,11 +723,10 @@ sub getMetric {
            # end of filter work part
 
            # JSON object selected by '*' key to return result as JSON for Zabbix 3.4.4 preprocessing feature
-           if (KEY_ANY eq $keyParts[$keyPos]->{'e'} && ('HASH' eq ref($currentRoot))) {
+           if (MASK_ANY eq $keyParts[$keyPos]->{'e'} && ('HASH' eq ref($currentRoot))) {
 #             print Dumper($currentRoot);
                push(@{$_[3]->{'data'}}, $currentRoot), goto FINISH if (ACT_RAW eq $_[0]->{'action'});
            }
-
            # hash with name equal key part is reached from current root with one hop?
            # ToDo: (... ||  KEY_ANY eq $keyParts[$keyPos]->{'e'}) for 'part.subpart.[filter].*' keys
            if (exists($currentRoot->{$keyParts[$keyPos]->{'e'}})) {
