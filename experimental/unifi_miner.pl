@@ -987,8 +987,10 @@ sub addToLLD {
     # $_[3] - Outgoing objects list
 
     # remap object type: add key to type for right select and add macroses
-    my $givenObjType  = $_[0]->{'objecttype'}.($_[0]->{'key'} ? "_$_[0]->{'key'}" : ''),
-    my $parentObjType = $_[1]->{'type'}, my $parentObjData;
+    my $givenObjType  = $_[0]->{'objecttype'}.($_[0]->{'key'} ? "_$_[0]->{'key'}" : '');
+    my $parentObjType;
+    $_[0]->{'key'} ? ($parentObjType = $_[1]->{'data'}->{'type'}) : ($parentObjType = $_[1]->{'type'});
+    my $parentObjData;
     $parentObjData = $_[1]->{'data'} if (defined($_[1]));
 
     logMessage(DEBUG_LOW, "[+] addToLLD() started"), logMessage(DEBUG_MID, "[>]\t args: object type: '$_[0]->{'objecttype'}'"); 
