@@ -6,6 +6,7 @@ Fixed:
 
 Added:
 - RegExp feature for the filter expression; 
+- New action _raw_ and new virtual key _*_ for taking raw JSON subtree from the tree. 
 
 ### v1.3.5
 Fixed:
