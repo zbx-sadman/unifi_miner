@@ -1,5 +1,12 @@
 ## UniFi Miner change log 
 
+### v1.3.6
+Fixed:
+- Script execution error when object without id-key reached (probably it unadopted devices);
+
+Added:
+- RegExp feature for the filter expression; 
+
 ### v1.3.5
 Fixed:
 - Metrics obtaining from UniFi Security Gateway;
