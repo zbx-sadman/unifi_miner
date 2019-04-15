@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.6
+#  UniFi Miner 1.3.7
 #
-#  (C) Grigory Prigodin 2015-2018
+#  (C) Grigory Prigodin 2015-2019
 #  Contact e-mail: zbx.sadman@gmail.com
 # 
 #
@@ -22,7 +22,7 @@ IO::Socket::SSL::set_default_context(IO::Socket::SSL::SSL_Context->new(SSL_versi
 use constant {
      TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_miner',
      TOOL_NAME => 'UniFi Miner',
-     TOOL_VERSION => '1.3.6',
+     TOOL_VERSION => '1.3.7',
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
@@ -51,6 +51,7 @@ use constant {
      OBJ_FIREWALLGROUP => 'firewallgroup',
      OBJ_FIREWALLRULE => 'firewallrule',
      OBJ_HEALTH => 'health',
+     OBJ_FW_UPDATE => 'fw_update',
      OBJ_HOTSPOT2 => 'hotspot2',
      OBJ_NETWORK => 'network',
      OBJ_NUMBER => 'number',
@@ -61,6 +62,7 @@ use constant {
      OBJ_SYSINFO => 'sysinfo',
      OBJ_UAP => 'uap',
      OBJ_UAP_VAP_TABLE => 'uap_vap_table',
+     OBJ_UAP_VWIRE_VAP_TABLE => 'uap_vwire_vap_table',
      OBJ_UPH => 'uph',
      OBJ_UGW => 'ugw',
      OBJ_USER => 'user',
@@ -68,6 +70,8 @@ use constant {
      OBJ_USW => 'usw',
      OBJ_USW_PORT_TABLE => 'usw_port_table',
      OBJ_VOUCHER => 'voucher',
+     OBJ_WDG_HEALTH => 'wdg_health',
+     OBJ_WDG_SWITCH => 'wdg_switch',
      OBJ_WLAN => 'wlan',
      OBJ_WLANGROUP => 'wlangroup',
 
@@ -277,10 +281,13 @@ if (CONTROLLER_VERSION_5 eq $globalConfig->{'unifiversion'}) {
       OBJ_ALLUSER         , {'method' => BY_GET, 'path' => 'stat/alluser'},
       OBJ_DPI             , {'method' => BY_GET, 'path' => 'stat/dpi'},
       OBJ_HEALTH          , {'method' => BY_GET, 'path' => 'stat/health'},
+      OBJ_FW_UPDATE       , {'method' => BY_GET, 'path' => 'stat/fwupdate/latest-version'},
       OBJ_SITEDPI         , {'method' => BY_GET, 'path' => 'stat/sitedpi'},
       OBJ_SYSINFO         , {'method' => BY_GET, 'path' => 'stat/sysinfo'},
       OBJ_USER            , {'method' => BY_GET, 'path' => 'stat/sta'},
       OBJ_VOUCHER         , {'method' => BY_GET, 'path' => 'stat/voucher'},
+      OBJ_WDG_HEALTH      , {'method' => BY_GET, 'path' => 'stat/widget/health'},
+      OBJ_WDG_SWITCH      , {'method' => BY_GET, 'path' => 'stat/widget/switch-stats'},
       OBJ_EXTENSION       , {'method' => BY_GET, 'path' => 'rest/extension'},
       OBJ_FIREWALLGROUP   , {'method' => BY_GET, 'path' => 'rest/firewallgroup'},
       OBJ_FIREWALLRULE    , {'method' => BY_GET, 'path' => 'rest/firewallrule'},
@@ -293,7 +300,8 @@ if (CONTROLLER_VERSION_5 eq $globalConfig->{'unifiversion'}) {
       OBJ_WLAN            , {'method' => BY_GET, 'path' => 'rest/wlanconf'},
       OBJ_WLANGROUP       , {'method' => BY_GET, 'path' => 'rest/wlangroup'},
       OBJ_USW_PORT_TABLE  , {'parent' => OBJ_USW},
-      OBJ_UAP_VAP_TABLE   , {'parent' => OBJ_UAP}
+      OBJ_UAP_VAP_TABLE   , {'parent' => OBJ_UAP},
+      OBJ_UAP_VWIRE_VAP_TABLE, {'parent' => OBJ_UAP}
    };
 } elsif (CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
    $globalConfig->{'fetch_rules'} = {
@@ -388,7 +396,7 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
          # No key given - user need to discovery objects?
          if (ACT_DISCOVERY eq $globalConfig->{'action'}) {
             logMessage(DEBUG_MID, "[.]\t\t Discovering w/o key: add part of LLD");
-            addToLLD($globalConfig, $parentObj, $objList, $selectingResult->{'data'}) if ($objList);
+            addToLLD($globalConfig, $siteObj, $parentObj, $objList, $selectingResult->{'data'}) if ($objList);
          } else {
             logMessage(DEBUG_MID, "[.]\t\t Action '$globalConfig->{'action'}' w/o key not allowed");
          }
@@ -409,7 +417,7 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
                # select all elements which linked with key (key must be point to array)
                getMetric($globalConfig, $_, $globalConfig->{'key'}, $wrkSelectingResult);
                # Add some properties to LLD array
-               addToLLD($globalConfig, $parentObj, $wrkSelectingResult->{'data'}, $selectingResult->{'data'}) if (@{$wrkSelectingResult->{'data'}} > 0);
+               addToLLD($globalConfig, $siteObj, $parentObj, $wrkSelectingResult->{'data'}, $selectingResult->{'data'}) if (@{$wrkSelectingResult->{'data'}} > 0);
             }
          } else {
             getMetric($globalConfig, $objList, $globalConfig->{'key'}, $selectingResult);
@@ -982,110 +990,119 @@ sub fetchDataFromController {
 #*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/
 sub addToLLD {
     # $_[0] - $globalConfig
-    # $_[1] - Parent object
-    # $_[2] - Incoming objects list
-    # $_[3] - Outgoing objects list
-
+    # $_[1] - Site object
+    # $_[2] - Parent object
+    # $_[3] - Incoming objects list
+    # $_[4] - Outgoing objects list
+    
     # remap object type: add key to type for right select and add macroses
     my $givenObjType  = $_[0]->{'objecttype'}.($_[0]->{'key'} ? "_$_[0]->{'key'}" : ''),
-    my $parentObjType = $_[1]->{'type'}, my $parentObjData;
-    $parentObjData = $_[1]->{'data'} if (defined($_[1]));
+    my $parentObjType = $_[2]->{'type'}, my $parentObjData;
+    $parentObjData = $_[2]->{'data'} if (defined($_[2]));
  
     logMessage(DEBUG_LOW, "[+] addToLLD() started"), logMessage(DEBUG_MID, "[>]\t args: object type: '$_[0]->{'objecttype'}'"); 
-    logMessage(DEBUG_MID, "[>]\t Site name: '$_[1]->{'name'}'") if ($_[1]->{'name'});
+    logMessage(DEBUG_MID, "[>]\t Site name: '$_[2]->{'name'}'") if ($_[2]->{'name'});
+#    print Data::Dumper::Dumper $_[3];
+#    print $givenObjType;
     # $o - outgoing object's array element pointer, init as length of that array to append elements to the end
-    my $o = $_[3] ? @{$_[3]} : 0;
-    for (@{$_[2]}) {
+    my $o = $_[4] ? @{$_[4]} : 0;
+    for (@{$_[3]}) {
       # skip hidden 'super' site with OBJ_SITE
       next if ($_->{'attr_hidden'});
+
+      # Site info
       # $_[1] contain parent's data and its may be undefined if script uses with v2 controller or while generating LLD for OBJ_SITE  
       # if defined $_[0]->{'key'})  - discovery for subtable must be maded
       if (defined($_[1])) {
-         # analyze parent & add some fields
-         if (OBJ_SITE eq $parentObjType) {
-            $_[3][$o]->{'{#SITEID}'}    = "$parentObjData->{'_id'}",
-            $_[3][$o]->{'{#SITENAME}'}  = "$parentObjData->{'name'}";
-            # In v3 'desc' key is not exist, and site desc == name
-            $_[3][$o]->{'{#SITEDESC}'}  = $parentObjData->{'desc'} ? "$parentObjData->{'desc'}" : "$parentObjData->{'name'}";
-         } elsif (OBJ_USW eq $parentObjType) {
-            $_[3][$o]->{'{#USWID}'}     = "$parentObjData->{'_id'}",
-            $_[3][$o]->{'{#USWNAME}'}   = "$parentObjData->{'name'}",
-            $_[3][$o]->{'{#USWMAC}'}    = "$parentObjData->{'mac'}";
-         } elsif (OBJ_UAP eq $parentObjType) {
-            $_[3][$o]->{'{#UAPID}'}     = "$parentObjData->{'_id'}",
-            $_[3][$o]->{'{#UAPNAME}'}   = "$parentObjData->{'name'}",
-            $_[3][$o]->{'{#UAPMAC}'}    = "$parentObjData->{'mac'}";
-         }
+         $_[4][$o]->{'{#SITEID}'}       = "$_[1]->{'_id'}"  if (exists($_[1]->{'_id'}));
+         $_[4][$o]->{'{#SITENAME}'}     = "$_[1]->{'name'}" if (exists($_[1]->{'name'}));
+         $_[4][$o]->{'{#SITEDESC}'}     = $_[1]->{'desc'} ? "$_[1]->{'desc'}" : "$_[1]->{'name'}";
       }
 
-      #  add common fields
-      $_[3][$o]->{'{#NAME}'}         = "$_->{'name'}"     if (exists($_->{'name'}));
-      $_[3][$o]->{'{#ID}'}           = "$_->{'_id'}"      if (exists($_->{'_id'}));
-      $_[3][$o]->{'{#IP}'}           = "$_->{'ip'}"       if (exists($_->{'ip'}));
-      $_[3][$o]->{'{#MAC}'}          = "$_->{'mac'}"      if (exists($_->{'mac'}));
-      $_[3][$o]->{'{#STATE}'}        = "$_->{'state'}"    if (exists($_->{'state'}));
-      $_[3][$o]->{'{#ADOPTED}'}      = "$_->{'adopted'}"  if (exists($_->{'adopted'}));
+      # object info
+      $_[4][$o]->{'{#NAME}'}         = "$_->{'name'}"     if (exists($_->{'name'}));
+      $_[4][$o]->{'{#ID}'}           = "$_->{'_id'}"      if (exists($_->{'_id'}));
+      $_[4][$o]->{'{#IP}'}           = "$_->{'ip'}"       if (exists($_->{'ip'}));
+      $_[4][$o]->{'{#MAC}'}          = "$_->{'mac'}"      if (exists($_->{'mac'}));
+      $_[4][$o]->{'{#STATE}'}        = "$_->{'state'}"    if (exists($_->{'state'}));
+      $_[4][$o]->{'{#ADOPTED}'}      = "$_->{'adopted'}"  if (exists($_->{'adopted'}));
 
       # add object specific fields
       if      (OBJ_WLAN eq $givenObjType ) {
          # is_guest key could be not exist with 'user' network on v3 
-         $_[3][$o]->{'{#ISGUEST}'}   = "$_->{'is_guest'}" if (exists($_->{'is_guest'}));
+         $_[4][$o]->{'{#ISGUEST}'}   = "$_->{'is_guest'}" if (exists($_->{'is_guest'}));
       } elsif (OBJ_USER eq $givenObjType || OBJ_ALLUSER eq $givenObjType) {
          # sometime {hostname} may be null. UniFi controller replace that hostnames by {'mac'}
-         $_[3][$o]->{'{#NAME}'}      = $_->{'hostname'} ? "$_->{'hostname'}" : "$_->{'mac'}",
-         $_[3][$o]->{'{#OUI}'}       = "$_->{'oui'}";
+         $_[4][$o]->{'{#NAME}'}      = $_->{'hostname'} ? "$_->{'hostname'}" : "$_->{'mac'}",
+         $_[4][$o]->{'{#OUI}'}       = "$_->{'oui'}";
       } elsif (OBJ_UPH eq $givenObjType) {
-         $_[3][$o]->{'{#ID}'}        = "$_->{'device_id'}";
+         $_[4][$o]->{'{#ID}'}        = "$_->{'device_id'}";
       } elsif (OBJ_SITE eq $givenObjType) {
          # In v3 'desc' key is not exist, and site desc == name
-         $_[3][$o]->{'{#DESC}'} = $_->{'desc'} ? "$_->{'desc'}" : "$_->{'name'}";
+         $_[4][$o]->{'{#DESC}'} = $_->{'desc'} ? "$_->{'desc'}" : "$_->{'name'}";
+
+      } elsif (OBJ_UAP_VWIRE_VAP_TABLE eq $givenObjType) {
+         $_[4][$o]->{'{#UAPID}'}     = "$parentObjData->{'_id'}",
+         $_[4][$o]->{'{#UAPNAME}'}   = "$parentObjData->{'name'}",
+         $_[4][$o]->{'{#UAPMAC}'}    = "$parentObjData->{'mac'}",
+         $_[4][$o]->{'{#STATE}'}     = "$_->{'state'}",
+         $_[4][$o]->{'{#RADIO}'}     = "$_->{'radio'}",
+#         $_[4][$o]->{'{#BSSID}'}     = "$_->{'bssid'}",
+         $_[4][$o]->{'{#NAME}'}      = "$_->{'radio_name'}";
+
       } elsif (OBJ_UAP_VAP_TABLE eq $givenObjType) {
-         $_[3][$o]->{'{#UP}'}        = "$_->{'up'}",
-         $_[3][$o]->{'{#USAGE}'}     = "$_->{'usage'}",
-         $_[3][$o]->{'{#RADIO}'}     = "$_->{'radio'}",
-         $_[3][$o]->{'{#ISWEP}'}     = "$_->{'is_wep'}",
-         $_[3][$o]->{'{#ISGUEST}'}   = "$_->{'is_guest'}";
+         $_[4][$o]->{'{#UAPID}'}     = "$parentObjData->{'_id'}",
+         $_[4][$o]->{'{#UAPNAME}'}   = "$parentObjData->{'name'}",
+         $_[4][$o]->{'{#UAPMAC}'}    = "$parentObjData->{'mac'}",
+         $_[4][$o]->{'{#UP}'}        = "$_->{'up'}",
+         $_[4][$o]->{'{#ID}'}        = "$_->{'id'}",
+#         $_[4][$o]->{'{#USAGE}'}     = "$_->{'usage'}",
+#         $_[4][$o]->{'{#RADIO}'}     = "$_->{'radio'}",
+#         $_[4][$o]->{'{#ISWEP}'}     = "$_->{'is_wep'}",
+#         $_[4][$o]->{'{#ISGUEST}'}   = "$_->{'is_guest'}";
+         $_[4][$o]->{'{#ESSID}'}     = "$_->{'essid'}",
+         delete $_[4][$o]->{'{#NAME}'};
       } elsif (OBJ_USW_PORT_TABLE eq $givenObjType) {
-         $_[3][$o]->{'{#PORTIDX}'}   = "$_->{'port_idx'}",
-         $_[3][$o]->{'{#MEDIA}'}     = "$_->{'media'}",
-         $_[3][$o]->{'{#UP}'}        = "$_->{'up'}",
-         $_[3][$o]->{'{#PORTPOE}'}   = "$_->{'port_poe'}";
+         $_[4][$o]->{'{#PORTIDX}'}   = "$_->{'port_idx'}",
+         $_[4][$o]->{'{#MEDIA}'}     = "$_->{'media'}",
+         $_[4][$o]->{'{#UP}'}        = "$_->{'up'}",
+         $_[4][$o]->{'{#PORTPOE}'}   = "$_->{'port_poe'}";
       } elsif (OBJ_HEALTH eq $givenObjType) {
-         $_[3][$o]->{'{#SUBSYSTEM}'} = $_->{'subsystem'},
-         $_[3][$o]->{'{#STATUS}'}    = $_->{'status'};
+         $_[4][$o]->{'{#SUBSYSTEM}'} = $_->{'subsystem'},
+         $_[4][$o]->{'{#STATUS}'}    = $_->{'status'};
       } elsif (OBJ_NETWORK eq $givenObjType) {
-         $_[3][$o]->{'{#PURPOSE}'} = $_->{'purpose'},
-         $_[3][$o]->{'{#NETWORKGROUP}'} = $_->{'networkgroup'};
+         $_[4][$o]->{'{#PURPOSE}'} = $_->{'purpose'},
+         $_[4][$o]->{'{#NETWORKGROUP}'} = $_->{'networkgroup'};
       } elsif (OBJ_EXTENSION eq $givenObjType) {
-         $_[3][$o]->{'{#EXTENSION}'} = $_->{'extension'};
-#         $_[3][$o]->{'{#TARGET}'} = $_->{'target'};
+         $_[4][$o]->{'{#EXTENSION}'} = $_->{'extension'};
+#         $_[4][$o]->{'{#TARGET}'} = $_->{'target'};
 #         ;
 #      } elsif ($givenObjType eq OBJ_USERGROUP) {
 #         ;
       } elsif (OBJ_UAP eq $givenObjType) {
-         $_[3][$o]->{'{#NAME}'}      = $_->{'name'} ? "$_->{'name'}" : "$_->{'mac'}";
+         $_[4][$o]->{'{#NAME}'}      = $_->{'name'} ? "$_->{'name'}" : "$_->{'mac'}";
 #         ;
 #      } elsif ($givenObjType eq OBJ_USG || $givenObjType eq OBJ_USW) {
 #        ;
       } elsif (OBJ_VOUCHER eq $givenObjType) {
-         $_[3][$o]->{'{#QUOTA}'}     = $_->{'quota'};
-         $_[3][$o]->{'{#USED}'}      = $_->{'used'} if (exists($_->{'used'}));
-         $_[3][$o]->{'{#DURATION}'}  = $_->{'duration'};
+         $_[4][$o]->{'{#QUOTA}'}     = $_->{'quota'};
+         $_[4][$o]->{'{#USED}'}      = $_->{'used'} if (exists($_->{'used'}));
+         $_[4][$o]->{'{#DURATION}'}  = $_->{'duration'};
       } elsif (OBJ_HOTSPOT2 eq $givenObjType) {
-         $_[3][$o]->{'{#HESSID}'}     = $_->{'hessid'};
+         $_[4][$o]->{'{#HESSID}'}     = $_->{'hessid'};
       }
 
       if (OBJ_ALLUSER eq $givenObjType) {
-          delete $_[3][$o]->{'{#SITEID}'},
-          delete $_[3][$o]->{'{#SITENAME}'},
-          delete $_[3][$o]->{'{#SITEDESC}'},
-          delete $_[3][$o]->{'{#MAC}'},
-          delete $_[3][$o]->{'{#OUI}'},
-          delete $_[3][$o]->{'{#NAME}'};
+          delete $_[4][$o]->{'{#SITEID}'},
+          delete $_[4][$o]->{'{#SITENAME}'},
+          delete $_[4][$o]->{'{#SITEDESC}'},
+          delete $_[4][$o]->{'{#MAC}'},
+          delete $_[4][$o]->{'{#OUI}'},
+          delete $_[4][$o]->{'{#NAME}'};
       }
      $o++;
     }
-    logMessage(DEBUG_HIGH, "[<]\t Generated LLD piece:\n\t", $_[3]);
+    logMessage(DEBUG_HIGH, "[<]\t Generated LLD piece:\n\t", $_[4]);
     logMessage(DEBUG_LOW, "[-] addToLLD() finished");
     return TRUE;
 }

@@ -1,5 +1,16 @@
 ## UniFi Miner change log 
 
+### v1.3.7
+Added new objects:
+- _uap\_vap\_table_ for _vap\_table_ array contained in UAPs data object. LLD is supported;
+- _uap\_vwire\_vap\_table_ for _vwire\_vap\_table_ array inside UAPs data object. LLD is supported;
+- _fw\_update_ for latest version update info;
+- _wdg\_health_ for Health widget's data fetching;
+- _wdg\_switch_ for Switch widget's data fetching.
+
+Note: some metrics was reorganized by Ubiquinty and moved to new JSON-tree places.
+
+
 ### v1.3.6
 Fixed:
 - Script execution error when object without id-key reached (probably it unadopted devices);
