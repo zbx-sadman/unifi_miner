@@ -857,7 +857,7 @@ sub fetchData {
             # ...fetch new data from controller...
             fetchDataFromController($_[0], $_[2], $objPath, $jsonData, $useShortWay) or logMessage(DEBUG_LOW, "[!] Can't fetch data from controller"), close ($fh), return FALSE;
             # unbuffered write it to temp file..
-            syswrite ($fh, $_[0]->{'json_engine'}->encode($jsonData));
+            syswrite ($fh, $_[0]->{'json_engine'}->pretty(FALSE)->encode($jsonData));
             # Now unlink old cache filedata from cache filename 
             # All processes, who already read data - do not stop and successfully completed reading
             unlink ($cacheFileName);
@@ -880,7 +880,7 @@ sub fetchData {
        # open file
        open($fh, "<:mmap", $cacheFileName) or logMessage(DEBUG_LOW, "[!] Can't open '$cacheFileName' ($!)"), return FALSE;
        # read data from file
-       $jsonData=$_[0]->{'json_engine'}->pretty(FALSE)->decode(<$fh>);
+       $jsonData=$_[0]->{'json_engine'}->decode(<$fh>);
        # close cache
        close($fh) or logMessage(DEBUG_LOW, "[!] Can't close cache file ($!)"), return FALSE;
     }
