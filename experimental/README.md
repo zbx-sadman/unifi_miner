@@ -1,5 +1,15 @@
 # Experimental place
 
+### 22.12.2019
+Miner 1.3.8
+
+ - New feature added: JSON's _pretty_ and _inline_ stringify methods for results of _discovery_ or _raw_ actions output
+```
+./unifi_miner.pl -a discovery -o wlan -s default -j pretty
+./unifi_miner.pl -a discovery -o wlan -s default -j inline
+
+```
+
 ### 22.12.2017
  - New feature added: regexp for filters. Regexp pattern can be used for filtering values of JSON keys. Refer to Perl Regexp tutorial for details. Use simple pattern, please. Example: 
 
