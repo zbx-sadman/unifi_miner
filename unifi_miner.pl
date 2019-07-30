@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.7
+#  UniFi Miner 1.3.8
 #
 #  (C) Grigory Prigodin 2015-2019
 #  Contact e-mail: zbx.sadman@gmail.com
@@ -22,7 +22,7 @@ IO::Socket::SSL::set_default_context(IO::Socket::SSL::SSL_Context->new(SSL_versi
 use constant {
      TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_miner',
      TOOL_NAME => 'UniFi Miner',
-     TOOL_VERSION => '1.3.7',
+     TOOL_VERSION => '1.3.8',
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
@@ -42,6 +42,10 @@ use constant {
      CONTROLLER_VERSION_3 => 'v3',
      CONTROLLER_VERSION_4 => 'v4',
      CONTROLLER_VERSION_5 => 'v5',
+
+     # *** JSON stringify method ***
+     JSON_INLINE => 'inline',
+     JSON_PRETTY => 'pretty',
 
      # *** Managed objects ***
      # Don't use object alluser with LLD - JSON may be broken due result size > 65535b (Max Zabbix LLD line size)
@@ -126,6 +130,8 @@ my $configDefs = {
    'cachemaxage'              => ['c', TYPE_NUMBER, 60],
    # Debug level 
    'debuglevel'               => ['d', TYPE_NUMBER, FALSE],
+   # JSON stringify method 
+   'jsonoutput'               => ['j', TYPE_STRING, JSON_PRETTY],
 
    # Default action for objects metric
    'action'                   => ['a', TYPE_STRING, ACT_DISCOVERY],
@@ -434,10 +440,10 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
        logMessage(DEBUG_MID, "[.] Make LLD JSON");
        # make JSON
        delete $selectingResult->{'total'};
-       $buffer = $globalConfig->{'json_engine'}->encode($selectingResult);
+       $buffer = $globalConfig->{'json_engine'}->pretty(JSON_PRETTY eq $globalConfig->{'jsonoutput'})->encode($selectingResult);
     } elsif (ACT_RAW eq $globalConfig->{'action'}) {
        logMessage(DEBUG_MID, "[.] Make selected object JSON");
-       $buffer = $globalConfig->{'json_engine'}->encode($selectingResult->{'data'}[0]);
+       $buffer = $globalConfig->{'json_engine'}->pretty(JSON_PRETTY eq $globalConfig->{'jsonoutput'})->encode($selectingResult->{'data'}[0]) if ($selectingResult->{'data'}[0]);
     } else {
        # User want no discovery action
        my $totalKeysProcesseed = @{$selectingResult->{'data'}};
@@ -494,9 +500,9 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
 # Value could be null-type (undef in Perl). If need to replace null to other char - {'nullchar'} must be defined. On default $globalConfig->{'nullchar'} is ''
 $buffer = $globalConfig->{'nullchar'} unless defined($buffer);
 $buferLength = length($buffer);
-# MAX_BUFFER_LEN - Zabbix buffer length. Sending more bytes have no sense.
-if ( MAX_BUFFER_LEN <= $buferLength) {
-    $buferLength = MAX_BUFFER_LEN-1, 
+# MAX_BUFFER_LEN - Zabbix incoming line length. Sending more bytes have no sense.
+if ((JSON_INLINE eq $globalConfig->{'jsonoutput'}) and (MAX_BUFFER_LEN <= $buferLength)) {
+    $buferLength = MAX_BUFFER_LEN - 1, 
     $buffer = substr($buffer, 0, $buferLength);
 }
 
@@ -851,7 +857,7 @@ sub fetchData {
             # ...fetch new data from controller...
             fetchDataFromController($_[0], $_[2], $objPath, $jsonData, $useShortWay) or logMessage(DEBUG_LOW, "[!] Can't fetch data from controller"), close ($fh), return FALSE;
             # unbuffered write it to temp file..
-            syswrite ($fh, $_[0]->{'json_engine'}->encode($jsonData));
+            syswrite ($fh, $_[0]->{'json_engine'}->pretty(FALSE)->encode($jsonData));
             # Now unlink old cache filedata from cache filename 
             # All processes, who already read data - do not stop and successfully completed reading
             unlink ($cacheFileName);

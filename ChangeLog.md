@@ -1,5 +1,13 @@
 ## UniFi Miner change log 
 
+### v1.3.8
+Added:
+
+- New cli key _-j stringify\_method_. User can enable/disable "Pretty JSON generation" feature. 
+
+Note: "Pretty JSON" formatting allow put to Zabbix more that 65535 bytes data blocks and user can control more objects (UAPs, Users, etc).
+
+
 ### v1.3.7
 Added new objects:
 - _uap\_vap\_table_ for _vap\_table_ array contained in UAPs data object. LLD is supported;
