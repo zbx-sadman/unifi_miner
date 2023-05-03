@@ -1,5 +1,5 @@
 ## UniFi Miner
-Experimental release is v1.4.0. Unifi Controller v7, Zabbix v6 (and JSONPath) supported. Try [Miner](https://github.com/zbx-sadman/unifi_miner/experimental) and compatible [template](https://github.com/zbx-sadman/unifi_proxy/Zabbix_Templates/UniFi Proxy 1.4.0 for Zabbix v6+) now.
+Experimental release is v1.4.0. Unifi Controller v7, Zabbix v6 (and JSONPath) supported. Try [Miner](https://github.com/zbx-sadman/unifi_miner/tree/master/experimental) and compatible [template](https://github.com/zbx-sadman/unifi_proxy/tree/master/Zabbix_Templates/UniFi%20Proxy%201.4.0%20for%20Zabbix%20v6%2B/Ubiquiti_UniFi_Controller_v_5_6_7_Passive_Checks) now.
 
 Actual release is v1.3.8. You can download its [here](https://github.com/zbx-sadman/unifi_miner/releases).
 
