@@ -1,5 +1,18 @@
 # Experimental place
 
+### 03.05.2023
+Miner 1.4.0
+
+ - Changed processing: _raw_ actions output includes all selected content as array now. On previous releases only first item returned. Zabbix JSONPath feature can to be used freely to select required items.
+ - Miner is tested on UniFi Controller v7 & Zabbix v6. New templates uses Zabbix 6 preprocessing deeply.
+
+```
+./unifi_miner.pl -a raw -o wlan -s default -k "*"
+[{"schedule_with_duration":[], ... many data here ... "wpa3_transition":false,"_id":"63737384ae690c0390dd7ced"}]
+
+```
+ Note: be sure to use virtual key \"*\" (all items) with `raw` action.
+
 ### 22.12.2019
 Miner 1.3.8
 

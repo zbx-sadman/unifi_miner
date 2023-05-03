@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 #
-#  UniFi Miner 1.3.8
+#  UniFi Miner 1.4.0
 #
-#  (C) Grigory Prigodin 2015-2019
+#  (C) Grigory Prigodin 2015-2023
 #  Contact e-mail: zbx.sadman@gmail.com
 # 
 #
@@ -22,7 +22,7 @@ IO::Socket::SSL::set_default_context(IO::Socket::SSL::SSL_Context->new(SSL_versi
 use constant {
      TOOL_HOMEPAGE => 'https://github.com/zbx-sadman/unifi_miner',
      TOOL_NAME => 'UniFi Miner',
-     TOOL_VERSION => '1.3.8',
+     TOOL_VERSION => '1.4.0',
 
      # *** Actions ***
      ACT_MEDIAN => 'median',
@@ -42,6 +42,8 @@ use constant {
      CONTROLLER_VERSION_3 => 'v3',
      CONTROLLER_VERSION_4 => 'v4',
      CONTROLLER_VERSION_5 => 'v5',
+     CONTROLLER_VERSION_6 => 'v6',
+     CONTROLLER_VERSION_7 => 'v7',
 
      # *** JSON stringify method ***
      JSON_INLINE => 'inline',
@@ -50,6 +52,7 @@ use constant {
      # *** Managed objects ***
      # Don't use object alluser with LLD - JSON may be broken due result size > 65535b (Max Zabbix LLD line size)
      OBJ_ALLUSER => 'alluser',
+     OBJ_DEVICE => 'device',
      OBJ_DPI => 'dpi',
      OBJ_EXTENSION => 'extension',
      OBJ_FIREWALLGROUP => 'firewallgroup',
@@ -257,7 +260,10 @@ $globalConfig->{'api_path'}       = "$globalConfig->{'unifilocation'}/api";
 $globalConfig->{'logout_path'}    = "$globalConfig->{'unifilocation'}/logout";
 
 # Define controller's login methods
-if (CONTROLLER_VERSION_5 eq $globalConfig->{'unifiversion'} || CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
+if (CONTROLLER_VERSION_7 eq $globalConfig->{'unifiversion'} 
+    || CONTROLLER_VERSION_6 eq $globalConfig->{'unifiversion'} 
+    || CONTROLLER_VERSION_5 eq $globalConfig->{'unifiversion'} 
+    || CONTROLLER_VERSION_4 eq $globalConfig->{'unifiversion'}) {
    $globalConfig->{'login_path'}  = "$globalConfig->{'unifilocation'}/api/login",
    $globalConfig->{'login_data'}  = "{\"username\":\"$globalConfig->{'unifiuser'}\",\"password\":\"$globalConfig->{'unifipass'}\"}",
    $globalConfig->{'content_type'}  = 'application/json;charset=UTF-8';
@@ -275,11 +281,14 @@ if (CONTROLLER_VERSION_5 eq $globalConfig->{'unifiversion'} || CONTROLLER_VERSIO
 #    [s/<site>/] must be excluded from path if {'excl_sitename'} is defined
 # BY_CMD say that data fetched by HTTP POST {'cmd'} to .../api/[s/<site>/]{'path'}
 #
-if (CONTROLLER_VERSION_5 eq $globalConfig->{'unifiversion'}) {
+if (CONTROLLER_VERSION_7 eq $globalConfig->{'unifiversion'} 
+    || CONTROLLER_VERSION_6 eq $globalConfig->{'unifiversion'} 
+    || CONTROLLER_VERSION_5 eq $globalConfig->{'unifiversion'}) {
    # 'stat/dpi' (OBJ_DPI) on v.5.0 ... v5.5 is the same that 'stat/sitedpi' (OBJ_SITEDPI) in v5.6 and above - API links just renamed
    # both of objects leaved in code to save compability with all releases of Controller v5
    $globalConfig->{'fetch_rules'} = {
       OBJ_SITE            , {'method' => BY_GET, 'path' => 'self/sites', 'excl_sitename' => TRUE},
+      OBJ_DEVICE          , {'method' => BY_GET, 'path' => 'stat/device', 'short_way' => TRUE, 'ignore_type' => TRUE},
       OBJ_UAP             , {'method' => BY_GET, 'path' => 'stat/device', 'short_way' => TRUE},
       OBJ_UPH             , {'method' => BY_GET, 'path' => 'stat/device', 'short_way' => TRUE},
       OBJ_UGW             , {'method' => BY_GET, 'path' => 'stat/device', 'short_way' => TRUE},
@@ -389,6 +398,7 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
          # Take objects from foreach'ed site
          # Take parent of virtual object, if 'parent' property detected. Or use real object type, if not.
          my $wrkObjType = ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}->{'parent'}) // $globalConfig->{'objecttype'};
+
          # Fetch object from site
          unless (fetchData($globalConfig, $siteObj->{'name'}, $wrkObjType, $globalConfig->{'id'}, $objList)) {
            logMessage(DEBUG_MID, "[!] No data found for object $globalConfig->{'objecttype'} (may be wrong site name)"), next;
@@ -442,8 +452,8 @@ unless ($globalConfig->{'fetch_rules'}->{$globalConfig->{'objecttype'}}) {
        delete $selectingResult->{'total'};
        $buffer = $globalConfig->{'json_engine'}->pretty(JSON_PRETTY eq $globalConfig->{'jsonoutput'})->encode($selectingResult);
     } elsif (ACT_RAW eq $globalConfig->{'action'}) {
-       logMessage(DEBUG_MID, "[.] Make selected object JSON");
-       $buffer = $globalConfig->{'json_engine'}->pretty(JSON_PRETTY eq $globalConfig->{'jsonoutput'})->encode($selectingResult->{'data'}[0]) if ($selectingResult->{'data'}[0]);
+       logMessage(DEBUG_MID, "[.] Make selected object JSON (pure)");
+       $buffer = $globalConfig->{'json_engine'}->pretty(JSON_PRETTY eq $globalConfig->{'jsonoutput'})->encode($selectingResult->{'data'}) if ($selectingResult->{'data'});
     } else {
        # User want no discovery action
        my $totalKeysProcesseed = @{$selectingResult->{'data'}};
@@ -569,7 +579,7 @@ sub getMetric {
     logMessage(DEBUG_LOW, "[+] getMetric() started");
     logMessage(DEBUG_LOW, "[>]\t args: key: '$_[2]', action: '$_[0]->{'action'}'");
     logMessage(DEBUG_HIGH, "[>]\t incoming object info:'\n\t", $_[1]);
-    
+
     # split key to parts for analyze 
     # fast splitting procedure for filters without dots (.)
     #@keyParts = split (/[.]/, $_[2]);
@@ -611,6 +621,7 @@ sub getMetric {
            $keyParts[$i] = {'e' => $swap, 'l' => undef};
         }
     }
+
     # Some special actions is processed
    ###########################################     Main loop    ###########################################################
    while (TRUE) {
@@ -740,8 +751,7 @@ sub getMetric {
 
            # JSON object selected by '*' key to return result as JSON for Zabbix 3.4.4 preprocessing feature
            if (MASK_ANY eq $keyParts[$keyPos]->{'e'} && ('HASH' eq ref($currentRoot))) {
-#             print Dumper($currentRoot);
-               push(@{$_[3]->{'data'}}, $currentRoot), goto FINISH if (ACT_RAW eq $_[0]->{'action'});
+               push(@{$_[3]->{'data'}}, $currentRoot); #, goto FINISH if (ACT_RAW eq $_[0]->{'action'});
            }
            # hash with name equal key part is reached from current root with one hop?
            # ToDo: (... ||  KEY_ANY eq $keyParts[$keyPos]->{'e'}) for 'part.subpart.[filter].*' keys
@@ -809,7 +819,7 @@ sub fetchData {
    # $_[3] - obj id
    # $_[4] - jsonData object ref
    logMessage(DEBUG_LOW, "[+] fetchData() started");
-   logMessage(DEBUG_MID, "[>]\t args: object type: '$_[2]'");
+   logMessage(DEBUG_MID, "[>]\t args: object type: ", $_[2] ? $_[2] : 'none');
    logMessage(DEBUG_MID, "[>]\t id: '$_[3]'") if ($_[3]);
    logMessage(DEBUG_MID, "[>]\t mac: '$_[0]->{'mac'}'") if ($_[0]->{'mac'});
    my $fh, my $jsonData, my $objPath, my $useShortWay = FALSE,
@@ -898,8 +908,8 @@ sub fetchData {
        #  ...and its required object? If so push - object to global @objJSON and jump out from the loop.
        $_[4][0] = @{$jsonData}[$i], last if (exists(@{$jsonData}[$i]->{$idKey}) && (@{$jsonData}[$i]->{$idKey} eq $_[3]));
      } else {
-       # otherwise
-       push (@{$_[4]}, @{$jsonData}[$i]) if (!exists(@{$jsonData}[$i]->{'type'}) || (@{$jsonData}[$i]->{'type'} eq $_[2]));
+       # otherwise  
+       push (@{$_[4]}, @{$jsonData}[$i]) if (!exists(@{$jsonData}[$i]->{'type'}) || (@{$jsonData}[$i]->{'type'} eq $_[2]) || $_[0]->{'fetch_rules'}->{$_[2]}->{'ignore_type'});
      }
    } # for each jsonData
 
@@ -1000,7 +1010,7 @@ sub addToLLD {
     # $_[2] - Parent object
     # $_[3] - Incoming objects list
     # $_[4] - Outgoing objects list
-    
+
     # remap object type: add key to type for right select and add macroses
     my $givenObjType  = $_[0]->{'objecttype'}.($_[0]->{'key'} ? "_$_[0]->{'key'}" : ''),
     my $parentObjType = $_[2]->{'type'}, my $parentObjData;
@@ -1008,8 +1018,7 @@ sub addToLLD {
  
     logMessage(DEBUG_LOW, "[+] addToLLD() started"), logMessage(DEBUG_MID, "[>]\t args: object type: '$_[0]->{'objecttype'}'"); 
     logMessage(DEBUG_MID, "[>]\t Site name: '$_[2]->{'name'}'") if ($_[2]->{'name'});
-#    print Data::Dumper::Dumper $_[3];
-#    print $givenObjType;
+
     # $o - outgoing object's array element pointer, init as length of that array to append elements to the end
     my $o = $_[4] ? @{$_[4]} : 0;
     for (@{$_[3]}) {
