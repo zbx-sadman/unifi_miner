@@ -4,15 +4,22 @@
 Miner 1.4.0
 
  - Changed processing: _raw_ actions output includes all selected content as array now. On previous releases only first item returned. Zabbix JSONPath feature can to be used freely to select required items.
+ - Added new object: _device_ object represent all devices on UniFi Controller. This object can be used with Zabbix's JSONPath feature.
  - Miner is tested on UniFi Controller v7 & Zabbix v6. New templates uses Zabbix 6 preprocessing deeply.
 
 ```
 ./unifi_miner.pl -a raw -o wlan -s default -k "*"
 [{"schedule_with_duration":[], ... many data here ... "wpa3_transition":false,"_id":"63737384ae690c0390dd7ced"}]
 
-```
- Note: be sure to use virtual key \"*\" (all items) with `raw` action.
+./unifi_miner.pl -a raw -o device -s default -k "*"
+[{"adopted_by_client":"web","fixed_ap_available":true, ... many data here ..."meshv3_peer_mac":"","guest_token":"CF38A385630E3B55ECE0229CC6A856FBC"}]
 
+```
+ 
+ Note: be sure to use virtual key \"*\" (all items) with `raw` action.
+ 
+ Note: _device_ object query produce huge JSON.
+ 
 ### 22.12.2019
 Miner 1.3.8
 
